@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Access } from "@/components/access";
 import { Horizon } from "@/components/horizon";
 import { Tag } from "@/components/tag";
+import { Top } from "@/components/top";
 import { access, pages, site } from "@/lib/site";
 
 const columns = [
@@ -87,26 +88,7 @@ export const Footer = () => (
           {site.email}
         </span>
       </a>
-      <a
-        className="text-meta hover:text-ink order-2 flex items-center gap-2 justify-self-start text-[13px] transition-colors md:order-none md:justify-self-end"
-        href="#top"
-      >
-        Back to top
-        <span
-          aria-hidden="true"
-          className="bg-ink text-sheet flex size-6 items-center justify-center rounded-full"
-        >
-          <svg className="size-3" fill="none" viewBox="0 0 12 12">
-            <path
-              d="M6 9.5v-7M3 5.5l3-3 3 3"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.5"
-            />
-          </svg>
-        </span>
-      </a>
+      <Top />
     </div>
   </footer>
 );

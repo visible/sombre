@@ -4,10 +4,7 @@ import { Mark } from "@/components/mark";
 import { Nav } from "@/components/nav";
 
 export const Header = () => (
-  <header
-    className="border-line relative z-30 flex h-16 items-center justify-between gap-6 border-b px-5 sm:px-8"
-    id="top"
-  >
+  <header className="border-line relative z-30 flex h-16 items-center justify-between gap-6 border-b px-5 sm:px-8">
     <Link
       aria-label="Sombre home"
       className="brand text-ink flex w-fit items-end gap-2.5"
