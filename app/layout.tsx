@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Host_Grotesk, IBM_Plex_Mono } from "next/font/google";
 
+import { Footer } from "@/components/footer";
+import { Header } from "@/components/header";
 import { site } from "@/lib/site";
 
 import "./globals.css";
@@ -60,7 +62,11 @@ export const viewport: Viewport = {
 const RootLayout = ({ children }: LayoutProps<"/">) => (
   <html className={`${host.variable} ${plex.variable} antialiased`} lang="en">
     <body className="min-h-dvh font-sans" suppressHydrationWarning>
-      {children}
+      <div className="border-line mx-auto max-w-[1280px] xl:border-x 2xl:max-w-[1440px]">
+        <Header />
+        {children}
+        <Footer />
+      </div>
     </body>
   </html>
 );
