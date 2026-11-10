@@ -8,3 +8,9 @@ export const site = {
 } as const;
 
 export const access = `mailto:${site.email}?subject=${encodeURIComponent("Sombre early access")}`;
+
+export const pages = [
+  { href: "/docs", label: "Docs" },
+  { href: "/security", label: "Security" },
+  { href: "/changelog", label: "Changelog" },
+] as const;

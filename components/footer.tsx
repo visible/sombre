@@ -1,15 +1,18 @@
+import Link from "next/link";
+
 import { Access } from "@/components/access";
 import { Horizon } from "@/components/horizon";
 import { Tag } from "@/components/tag";
-import { access, site } from "@/lib/site";
+import { access, pages, site } from "@/lib/site";
 
 const columns = [
+  { links: pages, title: "Product" },
   {
     links: [
-      { href: "#how", label: "How it works" },
-      { href: "#history", label: "Session history" },
-      { href: "#why", label: "Why Sombre" },
-      { href: "#questions", label: "Questions" },
+      { href: "/#how", label: "How it works" },
+      { href: "/#history", label: "Session history" },
+      { href: "/#why", label: "Why Sombre" },
+      { href: "/#questions", label: "Questions" },
     ],
     title: "Explore",
   },
@@ -21,6 +24,9 @@ const columns = [
     title: "Say hello",
   },
 ] as const;
+
+const style =
+  "text-ink decoration-ink/30 hover:decoration-ink text-[15px] underline-offset-4 transition-colors hover:underline";
 
 export const Footer = () => (
   <footer className="border-line border-t">
@@ -40,7 +46,7 @@ export const Footer = () => (
       </div>
       <nav
         aria-label="Footer"
-        className="border-line grid grid-cols-2 content-start gap-8 border-t px-5 py-12 sm:px-8 lg:col-span-5 lg:border-t-0 lg:py-24 lg:pl-12"
+        className="border-line grid grid-cols-2 content-start gap-8 border-t px-5 py-12 sm:grid-cols-3 sm:px-8 lg:col-span-5 lg:border-t-0 lg:py-24 lg:pl-12"
       >
         {columns.map((column) => (
           <div key={column.title}>
@@ -50,12 +56,15 @@ export const Footer = () => (
             <ul className="mt-4 space-y-2.5">
               {column.links.map((link) => (
                 <li key={link.label}>
-                  <a
-                    className="text-ink decoration-ink/30 hover:decoration-ink text-[15px] underline-offset-4 transition-colors hover:underline"
-                    href={link.href}
-                  >
-                    {link.label}
-                  </a>
+                  {link.href.startsWith("/") ? (
+                    <Link className={style} href={link.href}>
+                      {link.label}
+                    </Link>
+                  ) : (
+                    <a className={style} href={link.href}>
+                      {link.label}
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
