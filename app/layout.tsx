@@ -89,9 +89,9 @@ const RootLayout = ({ children }: LayoutProps<"/">) => (
       <div className="border-line mx-auto max-w-[1280px] overflow-x-clip xl:border-x 2xl:max-w-[1440px]">
         <Header />
         <div id="stage">{children}</div>
+        <Pocket />
         <Footer />
       </div>
-      <Pocket />
       <script
         // oxlint-disable-next-line react/no-danger -- JSON-LD has to be inline
         dangerouslySetInnerHTML={{ __html: data }}

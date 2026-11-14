@@ -37,9 +37,9 @@ export const Motion = () => {
   const pathname = usePathname();
   const mode = useRef<Mode>("idle");
   const first = useRef(true);
+  const rescue = useRef(0);
 
   useEffect(() => {
-    let rescue = 0;
     const click = async (event: MouseEvent) => {
       const href = plain(event) ? internal(event) : null;
       if (!href) {
@@ -50,10 +50,11 @@ export const Motion = () => {
         return;
       }
       mode.current = "push";
+      window.clearTimeout(rescue.current);
       router.prefetch(href);
       await leave();
       router.push(href, { scroll: false });
-      rescue = window.setTimeout(() => {
+      rescue.current = window.setTimeout(() => {
         if (mode.current === "push") {
           mode.current = "idle";
           enter();
@@ -66,7 +67,6 @@ export const Motion = () => {
     document.addEventListener("click", click, true);
     window.addEventListener("popstate", pop);
     return () => {
-      window.clearTimeout(rescue);
       document.removeEventListener("click", click, true);
       window.removeEventListener("popstate", pop);
     };
@@ -74,6 +74,7 @@ export const Motion = () => {
 
   useEffect(() => {
     boot();
+    window.clearTimeout(rescue.current);
     const pushed = mode.current === "push";
     mode.current = "idle";
     if (first.current) {

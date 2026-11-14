@@ -29,7 +29,7 @@ const columns = [
 const style = "draw text-ink inline-block py-0.5 text-[15px]";
 
 export const Footer = () => (
-  <footer className="border-line border-t">
+  <footer className="border-line border-t" data-ground="">
     <div className="grid lg:grid-cols-12">
       <div className="border-line px-5 py-16 sm:px-8 lg:col-span-7 lg:border-r lg:py-24">
         <Tag>Early access</Tag>
@@ -75,10 +75,7 @@ export const Footer = () => (
         ))}
       </nav>
     </div>
-    <div
-      className="border-line relative h-[240px] overflow-hidden border-t sm:h-[340px] lg:h-[420px]"
-      data-ground=""
-    >
+    <div className="border-line relative h-[240px] overflow-hidden border-t sm:h-[340px] lg:h-[420px]">
       <Horizon />
     </div>
     <div className="border-line grid items-center gap-4 border-t px-5 py-6 sm:px-8 md:grid-cols-[1fr_auto_1fr]">

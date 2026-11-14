@@ -27,7 +27,7 @@ export const Statement = () => (
         <span className="draw at-rest">How Sombre handles security</span>
         <span
           aria-hidden="true"
-          className="bg-ink text-sheet flex size-5 items-center justify-center overflow-clip rounded-full"
+          className="disc bg-ink text-sheet flex size-5 items-center justify-center overflow-clip rounded-full"
         >
           <svg className="nudge-right size-3" fill="none" viewBox="0 0 12 12">
             <path

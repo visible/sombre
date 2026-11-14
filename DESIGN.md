@@ -15,7 +15,7 @@ The brief, concept and system behind the `reimagine` branch. Read this before ch
 Idea:        The page is one session. Scroll off the desk and it leaves the Mac window and comes with you.
 Metaphor:    A handoff from desk to pocket. The pocket is a capsule that stays with the visitor.
 Signature:   The pocket session. It appears when the hero leaves the viewport, advances as sections
-             pass, waits for the visitor to tap Approve, and lands in the footer horizon.
+             pass, waits for the visitor to tap Approve, and steps aside when the footer arrives.
 Emotion:     Calm confidence. You can walk away and nothing is lost.
 Motion verb: Hand off. Things leave one side and dock on the other; labels roll, lines draw from the left.
 Screenshot:  "Step away." across the full width above the ember field, or the capsule asking to run bun test.
@@ -23,7 +23,7 @@ Screenshot:  "Step away." across the full width above the ember field, or the ca
 
 Anchor: the tagline "Step away. The session comes with you." and the product's one mechanic, approving a command from your phone. Swap in another product and the capsule has nothing to say.
 
-Concepts considered: the sun in the mark tracking a working day (too close to a time-of-day scroll trope, and it would change the palette), and a strict two-column "two screens" grid (a layout, not an idea). The footer keeps the first one as a detail: the capsule lands where the sun rises.
+Concepts considered: the sun in the mark tracking a working day (too close to a time-of-day scroll trope, and it would change the palette), and a strict two-column "two screens" grid (a layout, not an idea). The footer keeps the first one as a detail: the capsule leaves as the sun rises.
 
 ## System
 
@@ -55,4 +55,6 @@ Footer     call to action, link columns, horizon, email
 
 - No loader and no WebGL: a product page with text as the LCP element does not earn them.
 - The hero intro is CSS only, so the heading paints without waiting for JavaScript.
+- The capsule floats over content like a phone's live activity. It sits before the footer in the DOM so Tab reaches Approve, and it is `inert` while hidden.
+- The capsule reads element positions on the GSAP ticker instead of using ScrollTrigger, which missed the footer on touch viewports.
 - Nothing is hidden in CSS before a reveal; GSAP sets the start state, so content is complete with scripts off and under reduced motion.

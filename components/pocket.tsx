@@ -80,6 +80,7 @@ export const Pocket = () => {
     }
     const desk = document.querySelector("[data-desk]");
     const ground = document.querySelector("[data-ground]");
+    const now = Boolean(document.querySelector("[data-pocket]"));
     let away = false;
     let landed = false;
     const pulse = still()
@@ -113,10 +114,10 @@ export const Pocket = () => {
       top = y;
       size = height;
       const tall = window.innerHeight;
-      away = desk ? desk.getBoundingClientRect().bottom < tall * 0.62 : y > 96;
-      landed = ground
-        ? ground.getBoundingClientRect().top < tall * 0.86
-        : false;
+      away = desk
+        ? desk.getBoundingClientRect().bottom < tall * 0.62
+        : now || y > 96;
+      landed = ground ? ground.getBoundingClientRect().top < tall * 0.9 : false;
       for (const section of sections) {
         if (section.getBoundingClientRect().top < tall * 0.58) {
           session.advance(section.dataset.session ?? "");

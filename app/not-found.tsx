@@ -18,7 +18,7 @@ const Missing = () => (
     tag="404"
     title="This page stepped away"
   >
-    <div className="border-line border-t px-5 py-10 sm:px-8">
+    <div className="border-line border-t px-5 py-10 sm:px-8" data-pocket="">
       <Link
         className="pill bg-ink text-sheet inline-flex h-11 items-center justify-center rounded-full px-5 text-[15px] font-medium"
         href="/"

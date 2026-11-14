@@ -16,7 +16,7 @@ export const Top = () => (
     Back to top
     <span
       aria-hidden="true"
-      className="bg-ink text-sheet flex size-6 items-center justify-center overflow-clip rounded-full"
+      className="disc bg-ink text-sheet flex size-6 items-center justify-center overflow-clip rounded-full"
     >
       <svg className="nudge-up size-3" fill="none" viewBox="0 0 12 12">
         <path

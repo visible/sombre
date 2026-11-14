@@ -125,7 +125,7 @@ export const Replay = () => {
                   className={`relative z-10 ml-[1px] size-[11px] shrink-0 rounded-full border-2 transition-colors ${dot(current, item.device)}`}
                 />
                 <span
-                  className={`min-w-0 flex-1 truncate text-[15px] transition-[color,translate] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none ${current ? "text-ink translate-x-1.5" : "text-body group-hover:text-ink"}`}
+                  className={`min-w-0 flex-1 text-[15px] transition-[color,translate] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none sm:truncate ${current ? "text-ink translate-x-1.5" : "text-body group-hover:text-ink"}`}
                 >
                   {item.title}
                 </span>

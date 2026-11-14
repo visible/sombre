@@ -175,8 +175,14 @@ html.lenis body {
 
 .draw.at-rest {
   background:
-    linear-gradient(currentColor 0 0) left bottom / 0% 1px no-repeat,
+    linear-gradient(var(--color-ember) 0 0) left bottom / 0% 2px no-repeat,
     linear-gradient(rgb(15 16 17 / 0.3) 0 0) left bottom / 100% 1px no-repeat;
+}
+
+.disc {
+  transition:
+    background-color 300ms ease,
+    color 300ms ease;
 }
 
 .draw-ember {
@@ -191,7 +197,7 @@ a:focus-visible > .draw,
 
 a:focus-visible > .draw.at-rest {
   background-size:
-    100% 1px,
+    100% 2px,
     100% 1px;
 }
 
@@ -235,8 +241,13 @@ a:focus-visible > .draw-ember {
 
   a:hover > .draw.at-rest {
     background-size:
-      100% 1px,
+      100% 2px,
       100% 1px;
+  }
+
+  .group:hover .disc {
+    background-color: var(--color-ember);
+    color: var(--color-ink);
   }
 
   a:hover > .draw-ember {

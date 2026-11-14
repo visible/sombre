@@ -18,7 +18,7 @@ export const Hero = () => (
           <span className="mask -ml-[0.05em] block text-[clamp(4rem,20.6cqi,17rem)] leading-none tracking-[-0.06em] whitespace-nowrap lg:col-span-12">
             <span className="up block">Step away.</span>
           </span>{" "}
-          <span className="mask mt-1 block text-[clamp(1.9rem,4.5cqi,3.8rem)] leading-[1.04] tracking-[-0.035em] text-balance lg:col-span-7 lg:mt-4">
+          <span className="mask mt-1 block text-[clamp(1.9rem,4.5cqi,3.8rem)] leading-[1.04] tracking-[-0.035em] text-balance lg:col-span-7 lg:mt-9">
             <span className="up block [animation-delay:90ms]">
               The session comes with you.
             </span>
@@ -27,7 +27,7 @@ export const Hero = () => (
         <p className="text-ink hidden font-mono text-[12px] leading-[1.35] tracking-[0.02em] uppercase lg:col-span-7 lg:col-start-1 lg:row-start-3 lg:mt-5 lg:block">
           For macOS. Phone in any browser.
         </p>
-        <div className="relative mt-6 lg:col-span-5 lg:col-start-8 lg:row-span-2 lg:row-start-2 lg:mt-6 lg:self-start">
+        <div className="relative mt-6 lg:col-span-5 lg:col-start-8 lg:row-span-2 lg:row-start-2 lg:mt-12 lg:self-start">
           <p className="text-body max-w-[34rem] text-[17px] leading-relaxed">
             Sombre runs Claude Code and Codex on your Mac. Open the same
             conversation on your phone to answer questions, approve changes, and
@@ -42,7 +42,7 @@ export const Hero = () => (
               <span className="draw at-rest">See how it works</span>
               <span
                 aria-hidden="true"
-                className="bg-ink text-sheet flex size-5 items-center justify-center overflow-clip rounded-full"
+                className="disc bg-ink text-sheet flex size-5 items-center justify-center overflow-clip rounded-full"
               >
                 <svg
                   className="nudge-down size-3"

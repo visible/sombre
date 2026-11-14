@@ -32,6 +32,7 @@ export const boot = () => {
 
 export const scroll = (target: number | string, instant = false) => {
   if (lenis) {
+    lenis.resize();
     lenis.scrollTo(target, { force: true, immediate: instant });
     return;
   }
