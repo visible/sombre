@@ -30,6 +30,11 @@ const principles = [
 
 const Security = () => (
   <Shell
+    facts={[
+      { label: "Agent runs on", value: "Your Mac" },
+      { label: "Code sent to relay", value: "None" },
+      { label: "Runs without approval", value: "Nothing" },
+    ]}
     lead="Sombre lets you leave your desk without handing your code to anyone. Here's how it's designed to keep that promise."
     tag="Security"
     title="Your code, your machine"
@@ -52,11 +57,8 @@ const Security = () => (
     <p className="border-line text-body border-t px-5 py-8 text-[15px] leading-relaxed sm:px-8">
       Sombre is in early development, and this page will add more detail as the
       first build ships. Questions about security?{" "}
-      <a
-        className="text-ink decoration-ink/30 hover:decoration-ink underline underline-offset-4"
-        href={`mailto:${site.email}`}
-      >
-        {site.email}
+      <a className="text-ink inline-block" href={`mailto:${site.email}`}>
+        <span className="draw at-rest inline-block py-0.5">{site.email}</span>
       </a>
     </p>
   </Shell>

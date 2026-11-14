@@ -38,6 +38,11 @@ const topics = [
 
 const Docs = () => (
   <Shell
+    facts={[
+      { label: "Status", value: "With the first build" },
+      { label: "Guides planned", value: String(topics.length) },
+      { label: "Platform", value: "macOS" },
+    ]}
     lead="Docs arrive with the first build. Here's what they'll cover, and you can get early access to hear when they're ready."
     tag="Docs"
     title="Guides for every step"

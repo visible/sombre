@@ -1,8 +1,16 @@
 "use client";
 
+import { gsap } from "gsap";
 import { useEffect, useRef } from "react";
 
+import { boot, still as reduced } from "@/lib/motion";
 import { angle, heading, lean, noise } from "@/lib/rays";
+
+type Tone = "ember" | "paper";
+
+interface Props {
+  tone?: Tone;
+}
 
 interface Scene {
   width: number;
@@ -11,6 +19,11 @@ interface Scene {
   lengths: Float32Array;
 }
 
+const tones = {
+  ember: { base: 0.22, disc: "--color-ink", fade: 0.3, reach: 0.58 },
+  paper: { base: 0.5, disc: "--color-ember", fade: 1, reach: 0.48 },
+} as const;
+
 const progress = (risen: boolean, started: number, now: number) => {
   if (risen) {
     return 1;
@@ -18,26 +31,28 @@ const progress = (risen: boolean, started: number, now: number) => {
   if (started < 0) {
     return 0;
   }
-  return Math.min(1, Math.max(0, (now - started) / 1400));
+  return Math.min(1, Math.max(0, (now - started) / 1.4));
 };
 
 const color = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-export const Horizon = () => {
+export const Horizon = ({ tone = "paper" }: Props) => {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    boot();
     const frame = box.current;
     const node = canvas.current;
     const context = node?.getContext("2d");
     if (!frame || !node || !context) {
       return;
     }
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = reduced();
+    const look = tones[tone];
     const ink = color("--color-ink");
-    const ember = color("--color-ember");
+    const fill = color(look.disc);
     const scene: Scene = {
       count: 0,
       height: 0,
@@ -47,14 +62,13 @@ export const Horizon = () => {
     let pointer: { x: number; y: number } | null = null;
     let risen = still;
     let started = -1;
-    let handle = 0;
     let running = false;
     let visible = false;
 
     const shape = () => {
       const { width, height } = scene;
       const disc = Math.min(64, Math.max(34, width * 0.05));
-      const outer = Math.min(height * 0.94, width * 0.48);
+      const outer = Math.min(height * 0.94, width * look.reach);
       return { disc, inner: disc + 12, outer, x: width / 2, y: height };
     };
 
@@ -84,54 +98,50 @@ export const Horizon = () => {
             1 - Math.hypot(pointer.x - x, pointer.y - y) / (outer * 1.6)
           )
         : 0;
-      let moving = !risen && grow < 1;
       context.clearRect(0, 0, width, height);
       context.strokeStyle = ink;
       context.lineWidth = 1;
       for (let index = 0; index < count; index += 1) {
         const turn = angle(index, count);
         const pull = target === null ? 0 : lean(turn, target, 0.2) * near;
+        const drift = still ? 0 : 0.06 * Math.sin(now * 0.6 + index * 0.42);
         const base = outer * (1 - 0.45 * noise(index));
-        const goal = Math.min(outer * 1.08, base * (1 + 0.42 * pull)) * rise;
+        const goal =
+          Math.min(outer * 1.08, base * (1 + 0.42 * pull + drift)) * rise;
         const current = lengths[index] ?? 0;
         const next = still ? goal : current + (goal - current) * 0.14;
-        if (Math.abs(goal - next) > 0.2) {
-          moving = true;
-        }
         lengths[index] = next;
         const reach = Math.max(inner, next);
-        context.globalAlpha = 0.5 + 0.5 * pull;
+        context.globalAlpha = look.base + (1 - look.base) * 0.6 * pull;
         context.beginPath();
         context.moveTo(x + inner * Math.cos(turn), y + inner * Math.sin(turn));
         context.lineTo(x + reach * Math.cos(turn), y + reach * Math.sin(turn));
         context.stroke();
       }
-      context.globalAlpha = 1;
-      context.fillStyle = ember;
+      context.globalAlpha = look.fade;
+      context.fillStyle = fill;
       context.beginPath();
       context.arc(x, y + disc * (1 - rise) * 0.8, disc, Math.PI, Math.PI * 2);
       context.fill();
+      context.globalAlpha = 1;
       if (grow >= 1) {
         risen = true;
       }
-      return moving;
     };
 
-    const loop = (now: number) => {
-      const moving = draw(now);
-      if (moving && visible) {
-        handle = requestAnimationFrame(loop);
-      } else {
-        running = false;
-      }
-    };
+    const tick = (time: number) => draw(time);
 
     const wake = () => {
-      if (still || running || !visible) {
+      const on = visible && !still;
+      if (on === running) {
         return;
       }
-      running = true;
-      handle = requestAnimationFrame(loop);
+      running = on;
+      if (on) {
+        gsap.ticker.add(tick);
+      } else {
+        gsap.ticker.remove(tick);
+      }
     };
 
     const move = (event: PointerEvent) => {
@@ -144,21 +154,18 @@ export const Horizon = () => {
       pointer = inside
         ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
         : null;
-      wake();
     };
 
     const leave = () => {
       pointer = null;
-      wake();
     };
 
     resize();
-    draw(performance.now());
+    draw(gsap.ticker.time);
 
     const sizes = new ResizeObserver(() => {
       resize();
-      draw(performance.now());
-      wake();
+      draw(gsap.ticker.time);
     });
     sizes.observe(frame);
 
@@ -166,11 +173,11 @@ export const Horizon = () => {
       ([entry]) => {
         visible = entry?.isIntersecting ?? false;
         if (visible && started < 0 && !still) {
-          started = performance.now();
+          started = gsap.ticker.time;
         }
         wake();
       },
-      { threshold: 0.3 }
+      { threshold: 0.15 }
     );
     view.observe(frame);
 
@@ -180,13 +187,13 @@ export const Horizon = () => {
     }
 
     return () => {
-      cancelAnimationFrame(handle);
+      gsap.ticker.remove(tick);
       sizes.disconnect();
       view.disconnect();
       window.removeEventListener("pointermove", move);
       document.documentElement.removeEventListener("pointerleave", leave);
     };
-  }, []);
+  }, [tone]);
 
   return (
     <div aria-hidden="true" className="absolute inset-0" ref={box}>

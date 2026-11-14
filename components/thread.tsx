@@ -129,25 +129,27 @@ const bodies: Record<Kind, (props: Body) => ReactNode> = {
 };
 
 export const Thread = ({ entries, device }: Props) => (
-  <div className="flex min-h-0 flex-1 flex-col justify-end [mask-image:linear-gradient(to_bottom,transparent,black_18%)]">
-    {entries.map((entry, index) => {
-      const Render = bodies[entry.kind];
-      return (
-        <div
-          className="reveal"
-          key={entry.id}
-          style={{ animationDelay: `${entry.delay}ms` }}
-        >
-          <div className="min-h-0 overflow-hidden pt-3">
-            <Render
-              after={linked(entries, index)}
-              before={index > 0 && linked(entries, index - 1)}
-              device={device}
-              entry={entry}
-            />
+  <div className="flex min-h-0 flex-1 flex-col justify-end [mask-image:linear-gradient(to_bottom,transparent,black_12%)]">
+    <div className="flex min-h-full shrink-0 flex-col pt-4">
+      {entries.map((entry, index) => {
+        const Render = bodies[entry.kind];
+        return (
+          <div
+            className="reveal"
+            key={entry.id}
+            style={{ animationDelay: `${entry.delay}ms` }}
+          >
+            <div className="min-h-0 overflow-hidden pt-3">
+              <Render
+                after={linked(entries, index)}
+                before={index > 0 && linked(entries, index - 1)}
+                device={device}
+                entry={entry}
+              />
+            </div>
           </div>
-        </div>
-      );
-    })}
+        );
+      })}
+    </div>
   </div>
 );

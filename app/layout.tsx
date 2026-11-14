@@ -3,6 +3,8 @@ import { Host_Grotesk, IBM_Plex_Mono } from "next/font/google";
 
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
+import { Motion } from "@/components/motion";
+import { Pocket } from "@/components/pocket";
 import { site } from "@/lib/site";
 
 import "./globals.css";
@@ -19,6 +21,7 @@ const plex = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  alternates: { canonical: "./" },
   authors: [{ name: site.name }],
   creator: site.name,
   description: site.description,
@@ -59,14 +62,42 @@ export const viewport: Viewport = {
   themeColor: "#edefef",
 };
 
+const data = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  description: site.description,
+  name: site.name,
+  publisher: {
+    "@type": "Organization",
+    email: site.email,
+    name: site.name,
+    url: site.url,
+  },
+  url: site.url,
+}).replaceAll("<", "\\u003c");
+
 const RootLayout = ({ children }: LayoutProps<"/">) => (
-  <html className={`${host.variable} ${plex.variable} antialiased`} lang="en">
+  <html
+    className={`${host.variable} ${plex.variable} antialiased`}
+    lang="en"
+    suppressHydrationWarning
+  >
     <body className="min-h-dvh font-sans" suppressHydrationWarning>
-      <div className="border-line mx-auto max-w-[1280px] xl:border-x 2xl:max-w-[1440px]">
+      <a className="skip" href="#main">
+        Skip to content
+      </a>
+      <div className="border-line mx-auto max-w-[1280px] overflow-x-clip xl:border-x 2xl:max-w-[1440px]">
         <Header />
-        {children}
+        <div id="stage">{children}</div>
         <Footer />
       </div>
+      <Pocket />
+      <script
+        // oxlint-disable-next-line react/no-danger -- JSON-LD has to be inline
+        dangerouslySetInnerHTML={{ __html: data }}
+        type="application/ld+json"
+      />
+      <Motion />
     </body>
   </html>
 );

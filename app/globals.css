@@ -17,7 +17,23 @@ html {
   background: var(--color-paper);
   color: var(--color-ink);
   color-scheme: light;
-  scroll-behavior: smooth;
+}
+
+:root {
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-stopped {
+  overflow: clip;
 }
 
 ::selection {
@@ -41,6 +57,259 @@ html {
 .brand:hover [data-spoke],
 .brand:focus-visible [data-spoke] {
   scale: 1.16;
+}
+
+.skip {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 60;
+  translate: 0 -300%;
+  border-radius: 999px;
+  background: var(--color-ink);
+  padding: 0.6rem 1rem;
+  color: var(--color-sheet);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.skip:focus-visible {
+  translate: 0 0;
+  outline-offset: 2px;
+}
+
+#main:focus {
+  outline: none;
+}
+
+.mask {
+  overflow: clip;
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+
+@keyframes up {
+  from {
+    translate: 0 112%;
+  }
+}
+
+.up {
+  animation: up 1100ms var(--ease) both;
+}
+
+.roll {
+  display: inline-grid;
+  overflow: clip;
+}
+
+.roll > span {
+  grid-area: 1 / 1;
+  transition: translate 520ms var(--ease);
+}
+
+.roll > span + span {
+  translate: 0 115%;
+}
+
+.pill {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  transition:
+    scale 300ms var(--ease),
+    color 300ms ease;
+}
+
+.pill::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  translate: 0 101%;
+  border-radius: inherit;
+  background: var(--flood, var(--color-ember));
+  content: "";
+  transition: translate 520ms var(--ease);
+}
+
+.tab {
+  --flood: transparent;
+  overflow: visible;
+  background: linear-gradient(var(--color-ember) 0 0) left 1rem bottom 6px / 0
+    1.5px no-repeat;
+  transition:
+    background-size 520ms var(--ease),
+    color 300ms ease;
+}
+
+.pill:active {
+  scale: 0.96;
+}
+
+.tab[aria-current="page"],
+.tab:focus-visible {
+  background-size: calc(100% - 2rem) 1.5px;
+}
+
+.pill:focus-visible {
+  color: var(--color-ink);
+}
+
+.pill:focus-visible::before {
+  translate: 0 0;
+}
+
+.pill:focus-visible .roll > span {
+  translate: 0 -115%;
+}
+
+.pill:focus-visible .roll > span + span {
+  translate: 0 0;
+}
+
+.draw {
+  background: linear-gradient(currentColor 0 0) left bottom / 0% 1px no-repeat;
+  padding-bottom: 2px;
+  transition: background-size 520ms var(--ease);
+}
+
+.draw.at-rest {
+  background:
+    linear-gradient(currentColor 0 0) left bottom / 0% 1px no-repeat,
+    linear-gradient(rgb(15 16 17 / 0.3) 0 0) left bottom / 100% 1px no-repeat;
+}
+
+.draw-ember {
+  background-image: linear-gradient(var(--color-ember) 0 0);
+  background-size: 0% 2px;
+}
+
+a:focus-visible > .draw,
+.draw:focus-visible {
+  background-size: 100% 1px;
+}
+
+a:focus-visible > .draw.at-rest {
+  background-size:
+    100% 1px,
+    100% 1px;
+}
+
+a:focus-visible > .draw-ember {
+  background-size: 100% 2px;
+}
+
+[class*="nudge-"] {
+  transition: translate 420ms var(--ease);
+}
+
+.step-dot {
+  transition: scale 420ms var(--ease);
+}
+
+@media (hover: hover) {
+  .pill:hover {
+    color: var(--color-ink);
+  }
+
+  .pill:hover::before {
+    translate: 0 0;
+  }
+
+  .tab:hover {
+    background-size: calc(100% - 2rem) 1.5px;
+  }
+
+  .pill:hover .roll > span {
+    translate: 0 -115%;
+  }
+
+  .pill:hover .roll > span + span {
+    translate: 0 0;
+  }
+
+  a:hover > .draw,
+  .draw:hover {
+    background-size: 100% 1px;
+  }
+
+  a:hover > .draw.at-rest {
+    background-size:
+      100% 1px,
+      100% 1px;
+  }
+
+  a:hover > .draw-ember {
+    background-size: 100% 2px;
+  }
+
+  .group:hover .nudge-down {
+    translate: 0 2px;
+  }
+
+  .group:hover .nudge-up {
+    translate: 0 -2px;
+  }
+
+  .group:hover .nudge-right {
+    translate: 2px 0;
+  }
+
+  .step:hover .step-dot {
+    scale: 1.8;
+  }
+}
+
+.pocket {
+  position: fixed;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 50%;
+  z-index: 40;
+  width: max-content;
+  min-width: min(300px, calc(100vw - 1.5rem));
+  max-width: min(440px, calc(100vw - 1.5rem));
+  translate: -50% 150%;
+  scale: 0.86;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    translate 700ms var(--ease),
+    scale 700ms var(--ease),
+    opacity 300ms ease,
+    visibility 0s 700ms;
+}
+
+.pocket[data-shown] {
+  translate: -50% 0;
+  scale: 1;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+@keyframes dock {
+  from {
+    translate: 0 110%;
+  }
+}
+
+.pocket-line {
+  animation: dock 520ms var(--ease) both;
+}
+
+.pocket-busy {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-fog) 35%,
+    var(--color-sheet) 50%,
+    var(--color-fog) 65%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation:
+    dock 520ms var(--ease) both,
+    shimmer 1200ms linear infinite;
 }
 
 @keyframes reveal {
@@ -292,8 +561,24 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
+  .roll > span,
+  .draw,
+  .pill,
+  .pill::before,
+  .tab,
+  .pocket,
+  [class*="nudge-"] {
+    transition: none;
+  }
+
+  .roll > span + span {
+    visibility: hidden;
+  }
+
+  .up,
+  .pocket-line,
+  .pocket-busy {
+    animation: none;
   }
 
   .reveal,
@@ -311,7 +596,6 @@ html {
   }
 
   details summary svg,
-  [data-indicator],
   .brand [data-spoke] {
     transition: none;
   }

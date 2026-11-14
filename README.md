@@ -29,6 +29,7 @@
 > stack?
 
   next.js · typescript · tailwind · bun
+  gsap + lenis for motion (one clock, see DESIGN.md)
 
 > develop?
 
