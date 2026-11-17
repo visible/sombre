@@ -44,10 +44,6 @@ pub struct Values {
     pub folder: Option<String>,
 }
 
-pub fn link(text: &str, url: &str) -> String {
-    format!("\u{1b}]8;;{url}\u{1b}\\{text}\u{1b}]8;;\u{1b}\\")
-}
-
 pub fn assemble(order: &[String], values: &Values) -> Vec<String> {
     let order: Vec<&str> = if order.is_empty() {
         PARTS.to_vec()
@@ -110,7 +106,7 @@ pub fn parts(engine: &Engine) -> Vec<String> {
         .as_deref()
         .filter(|_| wanted("pr"))
         .and_then(|branch| opened(&engine.cwd, branch))
-        .map(|(number, url)| link(&format!("PR #{number}"), &url));
+        .map(|(number, url)| view::link(&format!("PR #{number}"), &url));
     let values = Values {
         agent: Some(engine.name().to_string()),
         branch,
@@ -164,7 +160,7 @@ mod tests {
 
     #[test]
     fn links_stay_whole_and_count_only_their_text() {
-        let pr = link("PR #25177", "https://github.com/visible/sombre/pull/25177");
+        let pr = view::link("PR #25177", "https://github.com/visible/sombre/pull/25177");
         assert_eq!(crate::dock::visible(&pr), 9);
         let parts = vec![
             "claude code".to_string(),

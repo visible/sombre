@@ -294,6 +294,10 @@ Entry::Typed(false, text) if text.starts_with('/') => None,
     shown.into_iter().skip(skip).collect()
 }
 
+pub fn link(text: &str, url: &str) -> String {
+    format!("\u{1b}]8;;{url}\u{1b}\\{text}\u{1b}]8;;\u{1b}\\")
+}
+
 pub fn pairing(url: &str, reach: crate::relay::Reach) {
     keep(Entry::Pairing(url.to_string(), reach));
     gap();
@@ -346,7 +350,10 @@ pub fn pairing(url: &str, reach: crate::relay::Reach) {
     }
     let characters: Vec<char> = url.chars().collect();
     for piece in characters.chunks(room) {
-        put(&format!("  {}", dim(&piece.iter().collect::<String>())));
+        put(&format!(
+            "  {}",
+            dim(&link(&piece.iter().collect::<String>(), url))
+        ));
     }
     put("");
 }
