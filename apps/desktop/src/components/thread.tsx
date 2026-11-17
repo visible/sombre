@@ -44,6 +44,7 @@ import {
   halt,
   note,
   remember,
+  unchanged,
   remembered,
   resolve,
   respond,
@@ -525,7 +526,7 @@ const Open = ({
   const [room, frame] = useWidth<HTMLElement>();
   const live = useLive(target.key);
   const quiet = live.entries.length === 0 && !live.busy;
-  const { agent, id, key } = target;
+  const { agent, id, key, updated } = target;
   const historic = !key.startsWith("fresh:");
 
   const load = useCallback(async () => {
@@ -534,12 +535,12 @@ const Open = ({
     }
     try {
       const entries = await read(agent, id);
-      remember(key, entries);
+      remember(key, entries, updated);
       setStory({ entries, state: "ready" });
     } catch (error) {
       setStory({ message: failure(error), state: "failed" });
     }
-  }, [agent, id, key, historic]);
+  }, [agent, id, key, historic, updated]);
 
   useEffect(() => {
     if (id) {
@@ -556,25 +557,14 @@ const Open = ({
   }, [agent, id, key]);
 
   useEffect(() => {
-    if (!quiet && remembered(key)) {
+    if (remembered(key) && (!quiet || unchanged(key, updated))) {
       return;
     }
     const refresh = async () => {
       await load();
     };
     refresh();
-  }, [load, quiet, key]);
-
-  useEffect(() => {
-    if (!quiet) {
-      return;
-    }
-    const refresh = async () => {
-      await load();
-    };
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
-  }, [quiet, load]);
+  }, [load, quiet, key, updated]);
 
   const entries = useMemo(
     () => [...(story.state === "ready" ? story.entries : []), ...live.entries],

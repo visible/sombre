@@ -76,6 +76,7 @@ export interface Target {
   title: string;
   place: string;
   folder: Folder | null;
+  updated: number;
 }
 
 export const target = (chat: Chat, key: string): Target => ({
@@ -85,6 +86,7 @@ export const target = (chat: Chat, key: string): Target => ({
   key,
   place: chat.place,
   title: chat.title,
+  updated: chat.updated,
 });
 
 export const fresh = (
@@ -98,4 +100,5 @@ export const fresh = (
   key: `fresh:${stamp}`,
   place: folder?.place ?? "",
   title: "new chat",
+  updated: 0,
 });

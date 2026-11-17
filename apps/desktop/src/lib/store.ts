@@ -47,7 +47,10 @@ const lives = new Map<string, Live>();
 const drafts = new Map<string, string>();
 const aliases = new Map<string, string>();
 const opened = new Set<string>();
-const stories = new Map<string, Entry[]>();
+const starting = new Map<string, Promise<null>>();
+const stories = new Map<string, { entries: Entry[]; updated: number }>();
+const prompts = new Map<string, number>();
+const KEPT = 6;
 const unread = new Set<string>();
 let viewing: string | null = null;
 let shown = "";
@@ -103,7 +106,10 @@ const subscribe = (listener: () => void) => {
   };
 };
 
-const emit = () => {
+let frame = 0;
+
+const notify = () => {
+  frame = 0;
   busy = [...lives]
     .filter(([, live]) => live.busy)
     .map(([key]) => key)
@@ -117,6 +123,12 @@ const emit = () => {
     .join("\n");
   for (const listener of listeners) {
     listener();
+  }
+};
+
+const emit = () => {
+  if (frame === 0) {
+    frame = requestAnimationFrame(notify);
   }
 };
 
@@ -154,6 +166,7 @@ const dispatch = async (key: string, text: string, images: Picture[] = []) => {
     since: Date.now(),
   }));
   try {
+    await starting.get(key);
     await send(
       key,
       marked(text, images.length),
@@ -187,14 +200,14 @@ const save = (
   if (!live.session) {
     return;
   }
-  const prompts = [...(stories.get(key) ?? []), ...live.entries].filter(
-    (entry) => entry.kind === "user"
-  ).length;
+  const asked =
+    (prompts.get(key) ?? 0) +
+    live.entries.filter((entry) => entry.kind === "user").length;
   record(agent, live.session, {
     files: update.files,
     from: update.from,
     to: update.to,
-    turn: prompts,
+    turn: asked,
   }).catch(() => null);
 };
 
@@ -303,11 +316,21 @@ export const begin = async (opening: Opening) => {
       mode: opening.mode ?? live.mode,
     }));
   }
+  const launched = start(opening, listen(opening.key, opening.agent));
+  starting.set(
+    opening.key,
+    launched.then(
+      () => null,
+      () => null
+    )
+  );
   try {
-    await start(opening, listen(opening.key, opening.agent));
+    await launched;
   } catch (error) {
     opened.delete(opening.key);
     fail(opening.key, error);
+  } finally {
+    starting.delete(opening.key);
   }
 };
 
@@ -490,15 +513,27 @@ export const move = async (
 
 export const isOpen = (key: string) => opened.has(key);
 
-export const remembered = (key: string) => stories.get(key);
+export const remembered = (key: string) => stories.get(key)?.entries;
 
-export const remember = (key: string, entries: Entry[]) => {
-  stories.set(key, entries);
+export const unchanged = (key: string, updated: number) =>
+  stories.get(key)?.updated === updated;
+
+export const remember = (key: string, entries: Entry[], updated: number) => {
+  stories.delete(key);
+  stories.set(key, { entries, updated });
+  prompts.set(key, entries.filter((entry) => entry.kind === "user").length);
+  for (const old of stories.keys()) {
+    if (stories.size <= KEPT) {
+      break;
+    }
+    stories.delete(old);
+  }
 };
 
 export const forget = (key: string) => {
   opened.delete(key);
   lives.delete(key);
   stories.delete(key);
+  prompts.delete(key);
   unread.delete(key);
 };

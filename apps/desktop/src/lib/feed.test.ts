@@ -65,6 +65,7 @@ describe("targets", () => {
       key: "codex:abc",
       place: "~/code/shop",
       title: "Fix the checkout total",
+      updated: 0,
     });
     const folder = {
       path: "/Users/sam/code/shop",
@@ -78,6 +79,7 @@ describe("targets", () => {
       key: "fresh:7",
       place: "~/code/shop",
       title: "new chat",
+      updated: 0,
     });
   });
 });
