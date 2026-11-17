@@ -184,7 +184,9 @@ mod tests {
         };
         assert!(opened("/tmp"));
         assert!(opened("/work/app"));
-        assert!(opened("/home/me/.cache"));
+        assert!(opened(
+            &Path::new("/home/me").join(".cache").to_string_lossy()
+        ));
         assert!(!opened("/home/me"));
         assert!(args.ends_with(&[
             "--unshare-pid".to_string(),
