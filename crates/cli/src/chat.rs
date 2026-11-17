@@ -772,8 +772,11 @@ fn device(roots: &Roots) {
                 }
                 .to_string(),
                 match lid {
-                    Lid::Sleeps => {
+                    Lid::Sleeps if cfg!(target_os = "macos") => {
                         "keeps running with the lid shut. asks for your password once. keep it plugged in"
+                    }
+                    Lid::Sleeps => {
+                        "keeps running with the lid shut while sombre is open. keep it plugged in"
                     }
                     Lid::Running => {
                         "turns itself off when sombre quits or the battery drops below 20%. tab switches it"
@@ -781,7 +784,7 @@ fn device(roots: &Roots) {
                     Lid::Stuck => {
                         "lid sleep is still off from an earlier run. tab turns it back on"
                     }
-                    Lid::Missing => "only on a mac for now",
+                    Lid::Missing => "only on mac and linux for now",
                 },
             ),
             (
@@ -834,9 +837,11 @@ fn device(roots: &Roots) {
                 crate::pane::release();
                 let done = match lid {
                     Lid::Sleeps => {
-                        println!(
-                            "  sombre needs your mac password to keep it running with the lid closed"
-                        );
+                        if cfg!(target_os = "macos") {
+                            println!(
+                                "  sombre needs your mac password to keep it running with the lid closed"
+                            );
+                        }
                         power::hold(&mark)
                     }
                     Lid::Running | Lid::Stuck => power::free(&mark),
