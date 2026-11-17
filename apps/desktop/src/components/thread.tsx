@@ -1,5 +1,7 @@
 import type { ReactNode, RefObject } from "react";
 import {
+  Suspense,
+  lazy,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -54,7 +56,6 @@ import {
 import { useWidth } from "../lib/width";
 import { Ask } from "./ask";
 import { Composer } from "./composer";
-import { Drawer } from "./drawer";
 import { Edits } from "./edits";
 import { Entry } from "./entry";
 import { Find } from "./find";
@@ -65,6 +66,11 @@ import { Questions } from "./questions";
 import { Review } from "./review";
 import { Start } from "./start";
 import { Work } from "./work";
+
+const Drawer = lazy(async () => {
+  const loaded = await import("./drawer");
+  return { default: loaded.Drawer };
+});
 
 type Story =
   | { state: "loading" }
@@ -802,12 +808,14 @@ const Open = ({
         />
         {composer}
         {docked ? (
-          <Drawer
-            chatKey={key}
-            folder={docked.path}
-            onClose={stow}
-            place={docked.place}
-          />
+          <Suspense fallback={null}>
+            <Drawer
+              chatKey={key}
+              folder={docked.path}
+              onClose={stow}
+              place={docked.place}
+            />
+          </Suspense>
         ) : null}
       </div>
       {shown ? (
