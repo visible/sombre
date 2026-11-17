@@ -195,10 +195,10 @@ mod tests {
             quote(&real(dir.path()).display().to_string())
         )));
         assert!(text.contains("(subpath \"/private/tmp\")"));
-        let root = real(dir.path()).display().to_string();
+        let guarded = real(dir.path()).join(".git/config");
         assert!(text.contains(&format!(
-            "(deny file-write* (subpath \"{}/.git/config\")",
-            quote(&root)
+            "(deny file-write* (subpath \"{}\")",
+            quote(&guarded.display().to_string())
         )));
         assert!(text.contains("(deny process-exec (literal \"/bin/launchctl\")"));
         assert!(!text.contains(".bun\")") && !text.contains(".config\")"));
