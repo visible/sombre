@@ -1093,6 +1093,9 @@ fn cloud(remote: Remote) -> Link {
 }
 
 pub fn invite(reach: Reach, relay: Option<&str>) -> Result<(String, Reach), String> {
+    if live().is_none() {
+        let _ = reopen();
+    }
     let session = match live() {
         Some(session) => session,
         None => start(
