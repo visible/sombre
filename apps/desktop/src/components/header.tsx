@@ -32,8 +32,47 @@ interface Props {
   onOpen: (() => void) | null;
   onTerminal: (() => void) | null;
   onPhone: (() => void) | null;
+  phoned: boolean;
   chores: Chores;
 }
+
+const Handset = ({
+  onPress,
+  phoned,
+}: {
+  onPress: () => void;
+  phoned: boolean;
+}) => (
+  <button
+    aria-label={
+      phoned ? "pair a phone, a phone follows this chat" : "pair a phone"
+    }
+    className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-7 cursor-pointer items-center gap-1 rounded-lg px-2"
+    onClick={onPress}
+    title={phoned ? "a phone follows this chat" : "pair a phone"}
+    type="button"
+  >
+    <svg
+      aria-hidden="true"
+      className="size-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.4"
+      viewBox="0 0 16 16"
+    >
+      <rect height="13" rx="2" width="8" x="4" y="1.5" />
+      <path d="M7 12h2" />
+    </svg>
+    {phoned ? (
+      <span
+        aria-hidden="true"
+        className="bg-ember size-1.5 shrink-0 rounded-full"
+      />
+    ) : null}
+  </button>
+);
 
 export const Panel = () => (
   <svg
@@ -60,6 +99,7 @@ export const Header = ({
   onOpen,
   onTerminal,
   onPhone,
+  phoned,
   chores,
 }: Props) => {
   const [editing, setEditing] = useState(false);
@@ -249,29 +289,7 @@ export const Header = ({
             )}
           </button>
         ) : null}
-        {onPhone ? (
-          <button
-            aria-label="pair a phone"
-            className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-7 cursor-pointer items-center rounded-lg px-2"
-            onClick={onPhone}
-            title="pair a phone"
-            type="button"
-          >
-            <svg
-              aria-hidden="true"
-              className="size-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.4"
-              viewBox="0 0 16 16"
-            >
-              <rect height="13" rx="2" width="8" x="4" y="1.5" />
-              <path d="M7 12h2" />
-            </svg>
-          </button>
-        ) : null}
+        {onPhone ? <Handset onPress={onPhone} phoned={phoned} /> : null}
         {onTerminal ? (
           <button
             aria-label="terminal"

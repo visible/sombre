@@ -24,6 +24,7 @@ import {
   agents,
   chat as read,
   failure,
+  followed,
   launch,
   levels,
   modes,
@@ -577,6 +578,19 @@ const Open = ({
   const { finding, hide } = useFind(groups.length > 0);
   const { docked, stow, swap } = useDrawer(target.folder);
   const [phoning, setPhoning] = useState(false);
+  const [following, setFollowing] = useState<string | null>(null);
+  const recheck = useCallback(async () => {
+    setFollowing(await followed().catch(() => null));
+  }, []);
+
+  useEffect(() => {
+    const first = window.setTimeout(recheck, 0);
+    window.addEventListener("focus", recheck);
+    return () => {
+      window.clearTimeout(first);
+      window.removeEventListener("focus", recheck);
+    };
+  }, [recheck]);
   const missing = lack(installed, agent);
 
   useLayoutEffect(() => {
@@ -744,6 +758,7 @@ const Open = ({
           onPhone={null}
           onTerminal={null}
           onSidebar={onSidebar}
+          phoned={false}
           reviewing={false}
           target={target}
           version={0}
@@ -780,6 +795,7 @@ const Open = ({
           }
           onPhone={() => setPhoning(true)}
           onReview={toggle}
+          phoned={following === key}
           onTerminal={swap}
           onSidebar={onSidebar}
           reviewing={shown !== null}
@@ -801,7 +817,14 @@ const Open = ({
           top={finding ? <Find onClose={hide} root={scroller} /> : null}
         />
         {composer}
-        <Phone chatKey={key} onClose={() => setPhoning(false)} open={phoning} />
+        <Phone
+          chatKey={key}
+          onClose={() => {
+            setPhoning(false);
+            recheck();
+          }}
+          open={phoning}
+        />
         {docked ? (
           <Suspense fallback={null}>
             <Drawer
