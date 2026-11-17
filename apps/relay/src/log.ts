@@ -163,6 +163,21 @@ export const allowed = (stamps: number[], now: number) =>
   stamps.filter((at) => now - at < MINUTES).length < BURST &&
   stamps.filter((at) => now - at < DAY).length < DAILY;
 
+export const BUDGET = 32 * 1024 * 1024;
+
+export const over = (sizes: number[], budget = BUDGET) => {
+  let size = sizes.reduce((sum, each) => sum + each, 0);
+  let drop = 0;
+  while (drop < sizes.length - 1 && size > budget) {
+    size -= sizes[drop] ?? 0;
+    drop += 1;
+  }
+  return drop;
+};
+
+export const foreign = (headers: Headers) =>
+  headers.has("Origin") || (headers.get("Sec-Fetch-Site") ?? "none") !== "none";
+
 export const network = (address: string) =>
   address.includes(":")
     ? address.split(":").slice(0, 4).join(":").toLowerCase()

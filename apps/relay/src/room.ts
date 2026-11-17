@@ -5,6 +5,7 @@ import type { Device } from "./log";
 import {
   KEPT,
   append,
+  over,
   cursor,
   frame,
   hex,
@@ -84,7 +85,22 @@ export class Room extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair("ping", "pong")
+    );
     const { sql } = ctx.storage;
+    const made = sql
+      .exec(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'"
+      )
+      .toArray();
+    if (made.length > 0) {
+      this.load();
+    }
+  }
+
+  private tables() {
+    const { sql } = this.ctx.storage;
     sql.exec(
       "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
     );
@@ -94,6 +110,10 @@ export class Room extends DurableObject<Env> {
     sql.exec(
       "CREATE TABLE IF NOT EXISTS inbox (seq INTEGER PRIMARY KEY, id TEXT NOT NULL, item TEXT NOT NULL)"
     );
+  }
+
+  private load() {
+    const { sql } = this.ctx.storage;
     const meta = new Map(
       sql
         .exec<{ key: string; value: string }>("SELECT key, value FROM meta")
@@ -120,12 +140,10 @@ export class Room extends DurableObject<Env> {
       .toArray();
     this.received = (recent[0]?.seq ?? -1) + 1;
     this.seen = recent.map((row) => row.id).filter(Boolean);
-    ctx.setWebSocketAutoResponse(
-      new WebSocketRequestResponsePair("ping", "pong")
-    );
   }
 
   async init(secret: string) {
+    this.tables();
     this.secret = secret;
     this.epoch = hex(6);
     this.touched = Date.now();
@@ -307,6 +325,7 @@ export class Room extends DurableObject<Env> {
       item
     );
     this.ctx.storage.sql.exec("DELETE FROM inbox WHERE seq < ?", seq - KEPT);
+    this.trim("inbox", "seq", "item");
     this.received = seq + 1;
     if (id) {
       this.seen = [id, ...this.seen].slice(0, SEEN);
@@ -444,7 +463,26 @@ export class Room extends DurableObject<Env> {
     if (oldest !== undefined) {
       sql.exec("DELETE FROM out WHERE first < ?", oldest);
     }
+    this.trim("out", "first", "items");
     this.touch();
+  }
+
+  private trim(
+    table: "inbox" | "out",
+    key: "first" | "seq",
+    column: "item" | "items"
+  ) {
+    const { sql } = this.ctx.storage;
+    const rows = sql
+      .exec<{ at: number; size: number }>(
+        `SELECT ${key} AS at, length(${column}) AS size FROM ${table} ORDER BY ${key}`
+      )
+      .toArray();
+    const drop = over(rows.map((row) => row.size));
+    const cut = rows[drop]?.at;
+    if (drop > 0 && cut !== undefined) {
+      sql.exec(`DELETE FROM ${table} WHERE ${key} < ?`, cut);
+    }
   }
 
   private touch() {

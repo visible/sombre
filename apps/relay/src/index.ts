@@ -1,4 +1,4 @@
-import { hex, network, room } from "./log";
+import { foreign, hex, network, room } from "./log";
 import type { Env } from "./room";
 import { GONE, refused } from "./room";
 
@@ -61,6 +61,9 @@ const plain = async (env: Env, url: URL, name: string) => {
 };
 
 const create = async (request: Request, env: Env) => {
+  if (foreign(request.headers)) {
+    return text("pairings start from sombre on your computer", 403);
+  }
   const address = network(request.headers.get("CF-Connecting-IP") ?? "");
   const admitted = await env.GATES.get(env.GATES.idFromName(address)).admit(
     Date.now()

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  BUDGET,
   BURST,
   DAILY,
   DAY,
@@ -15,7 +16,9 @@ import {
   hex,
   label,
   machines,
+  foreign,
   network,
+  over,
   pack,
   rebuild,
   room,
@@ -148,5 +151,20 @@ describe("new pairings", () => {
     expect(network("2001:DB8:1:2:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1:2");
     expect(network("2001:db8:1:2:1111:2222:3333:4444")).toBe("2001:db8:1:2");
     expect(network("203.0.113.9")).toBe("203.0.113.9");
+  });
+
+  test("a room drops its oldest entries once it passes the byte budget", () => {
+    expect(over([10, 20, 30], 100)).toBe(0);
+    expect(over([60, 30, 30], 100)).toBe(1);
+    expect(over([60, 60, 60], 100)).toBe(2);
+    expect(over([500], 100)).toBe(0);
+    expect(over([BUDGET, 1])).toBe(1);
+  });
+
+  test("only the sombre app can start a pairing, never a web page", () => {
+    expect(foreign(new Headers())).toBe(false);
+    expect(foreign(new Headers({ "Sec-Fetch-Site": "none" }))).toBe(false);
+    expect(foreign(new Headers({ "Sec-Fetch-Site": "cross-site" }))).toBe(true);
+    expect(foreign(new Headers({ Origin: "https://evil.example" }))).toBe(true);
   });
 });
