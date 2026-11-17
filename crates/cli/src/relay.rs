@@ -26,6 +26,10 @@ const WAIT: Duration = Duration::from_secs(25);
 const SEEN: usize = 64;
 const PHOTOS: usize = 4;
 const HOSTED: &str = "https://sombre.si";
+const COMPUTER: &[u8] = b"sombre computer";
+const PHONE: &[u8] = b"sombre phone";
+const REMEMBERED: usize = 1024;
+const BUCKET: usize = 64;
 
 type Rooms = HashMap<String, Room>;
 
@@ -92,14 +96,15 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-pub fn seal(key: &[u8; 32], plain: &[u8]) -> Option<String> {
+fn sealed(key: &[u8; 32], plain: &[u8], side: &[u8]) -> Option<String> {
     let sealing = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, key).ok()?);
     let nonce: [u8; 12] = random();
     let mut buffer = plain.to_vec();
+    buffer.resize(buffer.len().div_ceil(BUCKET).max(1) * BUCKET, b' ');
     sealing
         .seal_in_place_append_tag(
             Nonce::assume_unique_for_key(nonce),
-            Aad::empty(),
+            Aad::from(side),
             &mut buffer,
         )
         .ok()?;
@@ -108,19 +113,51 @@ pub fn seal(key: &[u8; 32], plain: &[u8]) -> Option<String> {
     Some(URL_SAFE_NO_PAD.encode(framed))
 }
 
-pub fn unseal(key: &[u8; 32], text: &str) -> Option<Vec<u8>> {
+pub fn seal(key: &[u8; 32], plain: &[u8]) -> Option<String> {
+    sealed(key, plain, COMPUTER)
+}
+
+pub fn unseal(key: &[u8; 32], text: &str) -> Option<(Vec<u8>, [u8; 12])> {
     let framed = URL_SAFE_NO_PAD.decode(text.trim()).ok()?;
     if framed.len() < 12 + 16 {
         return None;
     }
     let (nonce, sealed) = framed.split_at(12);
+    let nonce: [u8; 12] = nonce.try_into().ok()?;
     let opening = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, key).ok()?);
-    let mut buffer = sealed.to_vec();
-    let nonce = Nonce::try_assume_unique_for_key(nonce).ok()?;
-    let plain = opening
-        .open_in_place(nonce, Aad::empty(), &mut buffer)
-        .ok()?;
-    Some(plain.to_vec())
+    [PHONE, &[]].iter().find_map(|side| {
+        let mut buffer = sealed.to_vec();
+        opening
+            .open_in_place(
+                Nonce::assume_unique_for_key(nonce),
+                Aad::from(*side),
+                &mut buffer,
+            )
+            .ok()
+            .map(|plain| (plain.to_vec(), nonce))
+    })
+}
+
+fn fresh(seen: &mut VecDeque<[u8; 12]>, nonce: [u8; 12]) -> bool {
+    if seen.contains(&nonce) {
+        return false;
+    }
+    seen.push_back(nonce);
+    if seen.len() > REMEMBERED {
+        seen.pop_front();
+    }
+    true
+}
+
+fn remembered(saved: &Value) -> VecDeque<[u8; 12]> {
+    saved["seen"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|text| URL_SAFE_NO_PAD.decode(text).ok())
+        .filter_map(|bytes| <[u8; 12]>::try_from(bytes).ok())
+        .collect()
 }
 
 pub fn inbound(plain: &[u8]) -> Option<Inbound> {
@@ -653,6 +690,7 @@ struct Session {
     messages: Mutex<VecDeque<Arrival>>,
     answers: Mutex<VecDeque<(String, bool)>>,
     replies: Mutex<VecDeque<(String, Option<Vec<String>>)>>,
+    seen: Mutex<VecDeque<[u8; 12]>>,
     stop: AtomicBool,
 }
 
@@ -676,7 +714,10 @@ impl Session {
 
     fn open(&self, item: &str) -> Option<Vec<u8>> {
         let (current, previous) = self.keys.lock().ok().map(|keys| *keys)?;
-        unseal(&current, item).or_else(|| previous.and_then(|previous| unseal(&previous, item)))
+        let (plain, nonce) = unseal(&current, item)
+            .or_else(|| previous.and_then(|previous| unseal(&previous, item)))?;
+        let mut seen = self.seen.lock().ok()?;
+        fresh(&mut seen, nonce).then_some(plain)
     }
 
     fn send(&self, key: &[u8; 32], message: &Value) {
@@ -788,7 +829,20 @@ fn snapshot(session: &Session) -> Value {
         .call("GET", "devices", "", "")
         .and_then(|body| serde_json::from_str::<Value>(&body).ok())
         .unwrap_or_else(|| json!([]));
-    let mut saved = json!({"devices": devices, "key": URL_SAFE_NO_PAD.encode(session.key())});
+    let seen: Vec<String> = session
+        .seen
+        .lock()
+        .map(|seen| {
+            seen.iter()
+                .map(|nonce| URL_SAFE_NO_PAD.encode(nonce))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut saved = json!({
+        "devices": devices,
+        "key": URL_SAFE_NO_PAD.encode(session.key()),
+        "seen": seen,
+    });
     match &session.link {
         Link::Here {
             room,
@@ -838,7 +892,7 @@ fn keep(session: &Session) {
     }
 }
 
-fn start(link: Link, key: [u8; 32]) -> Arc<Session> {
+fn start(link: Link, key: [u8; 32], seen: VecDeque<[u8; 12]>) -> Arc<Session> {
     let pause = match link {
         Link::Here { .. } => Duration::from_secs(2),
         Link::There(_) | Link::Cloud(..) => Duration::from_secs(20),
@@ -850,6 +904,7 @@ fn start(link: Link, key: [u8; 32]) -> Arc<Session> {
         link,
         messages: Mutex::new(VecDeque::new()),
         saved: Mutex::new(String::new()),
+        seen: Mutex::new(seen),
         stop: AtomicBool::new(false),
     });
     let puller = Arc::clone(&session);
@@ -984,6 +1039,7 @@ pub fn invite(reach: Reach, relay: Option<&str>) -> Result<(String, Reach), Stri
                 (reach, _) => here(reach)?,
             },
             random(),
+            VecDeque::new(),
         ),
     };
     let token = hex(&random::<16>());
@@ -1161,7 +1217,7 @@ fn reopen() -> Result<bool, String> {
             None => link,
         }
     };
-    start(link, key);
+    start(link, key, remembered(&saved));
     Ok(true)
 }
 
@@ -1375,6 +1431,7 @@ mod tests {
             link,
             messages: Mutex::new(VecDeque::new()),
             saved: Mutex::new(String::new()),
+            seen: Mutex::new(VecDeque::new()),
             stop: AtomicBool::new(false),
         }
     }
@@ -1397,19 +1454,68 @@ mod tests {
     #[test]
     fn seals_so_only_the_key_opens_it() {
         let key: [u8; 32] = random();
-        let sealed =
-            seal(&key, b"{\"kind\":\"answer\",\"id\":\"r1\",\"yes\":true}").unwrap_or_default();
-        assert!(!sealed.contains("answer"));
+        let plain = b"{\"kind\":\"answer\",\"id\":\"r1\",\"yes\":true}";
+        let phone = sealed(&key, plain, PHONE).unwrap_or_default();
+        assert!(!phone.contains("answer"));
         assert_eq!(
-            unseal(&key, &sealed).as_deref().and_then(inbound),
+            unseal(&key, &phone).and_then(|(plain, _)| inbound(&plain)),
             Some(Inbound::Answer {
                 id: "r1".to_string(),
                 yes: true
             })
         );
         let other: [u8; 32] = random();
-        assert!(unseal(&other, &sealed).is_none());
+        assert!(unseal(&other, &phone).is_none());
         assert!(unseal(&key, "short").is_none());
+        let reflected = seal(&key, plain).unwrap_or_default();
+        assert!(unseal(&key, &reflected).is_none());
+        let older = sealed(&key, plain, &[]).unwrap_or_default();
+        assert!(unseal(&key, &older).is_some());
+        let yes = seal(&key, b"{\"yes\":true}").unwrap_or_default();
+        let no = seal(&key, b"{\"yes\":false}").unwrap_or_default();
+        assert_eq!(yes.len(), no.len());
+    }
+
+    #[test]
+    fn a_phone_message_only_counts_once_even_after_a_restart() {
+        let key: [u8; 32] = random();
+        let message =
+            sealed(&key, b"{\"kind\":\"message\",\"text\":\"hi\"}", PHONE).unwrap_or_default();
+        let link = Link::There(Remote {
+            base: "http://127.0.0.1:9".to_string(),
+            room: "r".to_string(),
+            secret: "s".to_string(),
+        });
+        let first = session(link);
+        if let Ok(mut keys) = first.keys.lock() {
+            *keys = (key, None);
+        }
+        assert!(first.open(&message).is_some());
+        assert!(first.open(&message).is_none());
+        let saved = json!({"seen": first.seen.lock().map(|seen| seen.iter().map(|nonce| URL_SAFE_NO_PAD.encode(nonce)).collect::<Vec<_>>()).unwrap_or_default()});
+        let mut again = remembered(&saved);
+        let (_, nonce) = unseal(&key, &message).unwrap_or_default();
+        assert!(!fresh(&mut again, nonce));
+        let mut full: VecDeque<[u8; 12]> = (0..REMEMBERED)
+            .map(|index| {
+                [
+                    u8::try_from(index % 256).unwrap_or(0),
+                    u8::try_from(index / 256).unwrap_or(0),
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                ]
+            })
+            .collect();
+        assert!(fresh(&mut full, [9; 12]));
+        assert_eq!(full.len(), REMEMBERED);
     }
 
     #[test]

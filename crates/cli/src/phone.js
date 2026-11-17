@@ -3,6 +3,9 @@ const MASK = 0x0f_ff_ff_fc_0f_ff_ff_fc_0f_ff_ff_fc_0f_ff_ff_ffn;
 const PRIME = (1n << 130n) - 5n;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+export const COMPUTER = encoder.encode("sombre computer");
+export const PHONE = encoder.encode("sombre phone");
+const BUCKET = 64;
 
 const rotate = (value, shift) => (value << shift) | (value >>> (32 - shift));
 
@@ -134,14 +137,14 @@ export const encode = (bytes) => {
 export const base = (bytes) =>
   encode(bytes).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 
-export const seal = (key, value) => {
+export const seal = (key, value, side = PHONE) => {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const sealed = encrypt(
-    key,
-    nonce,
-    new Uint8Array(),
-    encoder.encode(JSON.stringify(value))
-  );
+  const body = encoder.encode(JSON.stringify(value));
+  const plain = new Uint8Array(
+    Math.max(BUCKET, Math.ceil(body.length / BUCKET) * BUCKET)
+  ).fill(32);
+  plain.set(body);
+  const sealed = encrypt(key, nonce, side, plain);
   const framed = new Uint8Array(nonce.length + sealed.length);
   framed.set(nonce);
   framed.set(sealed, nonce.length);
@@ -216,19 +219,22 @@ export const queued = (raw) => {
   }
 };
 
-export const open = (key, text) => {
+export const unsealed = (key, text, side = COMPUTER) => {
   const framed = unbase(text);
   if (framed.length < 28) {
     return null;
   }
-  const plain = decrypt(
-    key,
-    framed.slice(0, 12),
-    new Uint8Array(),
-    framed.slice(12)
-  );
-  return plain ? JSON.parse(decoder.decode(plain)) : null;
+  const nonce = framed.slice(0, 12);
+  const body = framed.slice(12);
+  const directed = decrypt(key, nonce, side, body);
+  const plain = directed ?? decrypt(key, nonce, new Uint8Array(), body);
+  return plain
+    ? { directed: directed !== null, value: JSON.parse(decoder.decode(plain)) }
+    : null;
 };
+
+export const open = (key, text, side = COMPUTER) =>
+  unsealed(key, text, side)?.value ?? null;
 
 const PLACEHOLDER = /(?<placeholder>\[Image #\d+\])/u;
 const INLINE =
@@ -628,6 +634,7 @@ const start = () => {
     busy: false,
     clock: 0,
     device: recall("device"),
+    directed: false,
     epoch: "",
     joined: false,
     live: null,
@@ -825,6 +832,7 @@ const start = () => {
     return;
   }
   let key = unbase(saved);
+  const known = new Set([...JSON.parse(recall("keys") ?? "[]"), saved]);
   const tickle = () => {
     if (document.body.dataset.state !== "working") {
       return;
@@ -889,7 +897,11 @@ const start = () => {
       return;
     }
     sending = true;
-    const body = seal(key, next.value);
+    const body = seal(
+      key,
+      next.value,
+      state.directed ? PHONE : new Uint8Array()
+    );
     try {
       const response = await fetch(
         `${root}/send?device=${state.device}&id=${next.id}`,
@@ -1340,10 +1352,16 @@ const start = () => {
     }
     state.epoch = body.epoch;
     for (const item of body.items) {
-      const message = open(key, item);
+      const opened = unsealed(key, item);
+      state.directed ||= opened?.directed ?? false;
+      const message = opened?.value;
       if (message?.kind === "rekey") {
-        key = unbase(message.key);
-        remember("key", message.key);
+        if (!known.has(message.key)) {
+          known.add(message.key);
+          key = unbase(message.key);
+          remember("key", message.key);
+          remember("keys", JSON.stringify([...known].slice(-8)));
+        }
       } else if (message && !(message.again && state.joined)) {
         show(message);
       }

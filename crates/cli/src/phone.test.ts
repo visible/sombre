@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  COMPUTER,
+  PHONE,
   decrypt,
   delay,
   encode,
@@ -12,6 +14,7 @@ import {
   summary,
   tallied,
   ticket,
+  unsealed,
 } from "./phone.js";
 
 const bytes = (hex: string) =>
@@ -44,8 +47,33 @@ describe("chacha20-poly1305 on the phone", () => {
     const key = crypto.getRandomValues(new Uint8Array(32));
     const sealed = seal(key, { kind: "answer", yes: true });
     expect(sealed).not.toContain("answer");
-    expect(open(key, sealed)).toEqual({ kind: "answer", yes: true });
-    expect(open(crypto.getRandomValues(new Uint8Array(32)), sealed)).toBeNull();
+    expect(open(key, sealed, PHONE)).toEqual({ kind: "answer", yes: true });
+    expect(
+      open(crypto.getRandomValues(new Uint8Array(32)), sealed, PHONE)
+    ).toBeNull();
+  });
+
+  test("a message only opens in the direction it was sent", () => {
+    const key = crypto.getRandomValues(new Uint8Array(32));
+    const fromComputer = seal(key, { kind: "text", text: "hi" }, COMPUTER);
+    expect(open(key, fromComputer)).toEqual({ kind: "text", text: "hi" });
+    expect(open(key, seal(key, { kind: "answer", yes: true }))).toBeNull();
+    const older = seal(key, { kind: "text", text: "old" }, new Uint8Array());
+    expect(open(key, older)).toEqual({ kind: "text", text: "old" });
+    expect(unsealed(key, fromComputer)?.directed).toBe(true);
+    expect(unsealed(key, older)?.directed).toBe(false);
+  });
+
+  test("a yes and a no seal to the same length", () => {
+    const key = crypto.getRandomValues(new Uint8Array(32));
+    const yes = seal(key, { id: "r1", kind: "answer", yes: true });
+    const no = seal(key, { id: "r1", kind: "answer", yes: false });
+    expect(yes.length).toBe(no.length);
+    expect(open(key, no, PHONE)).toEqual({
+      id: "r1",
+      kind: "answer",
+      yes: false,
+    });
   });
 });
 

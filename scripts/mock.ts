@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { base, open, seal } from "../crates/cli/src/phone.js";
+import { COMPUTER, PHONE, base, open, seal } from "../crates/cli/src/phone.js";
 
 interface Image {
   name: string;
@@ -25,7 +25,7 @@ const waiters: (() => void)[] = [];
 let offline = false;
 
 const push = (value: unknown) => {
-  out.push(seal(key, value));
+  out.push(seal(key, value, COMPUTER));
   for (const wake of waiters.splice(0)) {
     wake();
   }
@@ -168,7 +168,7 @@ const server = Bun.serve({
     }
     if (path === "/r/mock/send") {
       const id = url.searchParams.get("id") ?? "";
-      const message: Message | null = open(key, await request.text());
+      const message: Message | null = open(key, await request.text(), PHONE);
       if (!message || seen.has(id)) {
         return new Response("ok");
       }
