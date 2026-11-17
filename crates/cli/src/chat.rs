@@ -553,9 +553,10 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
             Input::Pair(command) => pair(&engine, roots.as_ref(), &command),
             Input::Help => view::help(),
             Input::Exit => break,
-            Input::Unknown(text) => {
-                view::note(&format!("{text} isn't a command. /help lists them"));
-            }
+            Input::Unknown(text) => view::note(&match crate::complete::closest(&text) {
+                Some(command) => format!("{text} isn't a command. did you mean {command}?"),
+                None => format!("{text} isn't a command. /help lists them"),
+            }),
         }
     }
     ExitCode::SUCCESS

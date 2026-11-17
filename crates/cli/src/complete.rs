@@ -1,10 +1,11 @@
-const COMMANDS: [&str; 17] = [
+const COMMANDS: [&str; 18] = [
     "/resume",
     "/status",
     "/compact",
     "/skills",
     "/mcp",
     "/settings",
+    "/device",
     "/pair",
     "/goal",
     "/new",
@@ -23,6 +24,43 @@ const EFFORTS: [&str; 7] = [
     "default", "minimal", "low", "medium", "high", "xhigh", "max",
 ];
 const GOALS: [&str; 3] = ["pause", "resume", "clear"];
+
+const ALIASES: [(&str, &str); 6] = [
+    ("/remote", "/pair"),
+    ("/phone", "/pair"),
+    ("/mobile", "/pair"),
+    ("/switch", "/agent"),
+    ("/mode", "/permissions"),
+    ("/power", "/device"),
+];
+
+fn distance(one: &str, two: &str) -> usize {
+    let two: Vec<char> = two.chars().collect();
+    let mut row: Vec<usize> = (0..=two.len()).collect();
+    for (index, left) in one.chars().enumerate() {
+        let mut previous = row[0];
+        row[0] = index + 1;
+        for (spot, right) in two.iter().enumerate() {
+            let replaced = previous + usize::from(left != *right);
+            previous = row[spot + 1];
+            row[spot + 1] = replaced.min(previous + 1).min(row[spot] + 1);
+        }
+    }
+    row[two.len()]
+}
+
+pub fn closest(line: &str) -> Option<&'static str> {
+    let word = line.split_whitespace().next()?.to_lowercase();
+    if let Some((_, command)) = ALIASES.iter().find(|(alias, _)| *alias == word) {
+        return Some(command);
+    }
+    COMMANDS
+        .iter()
+        .map(|command| (distance(&word, command), *command))
+        .filter(|(far, _)| *far <= 2)
+        .min_by_key(|(far, _)| *far)
+        .map(|(_, command)| command)
+}
 
 pub fn suggest(line: &str, models: &[String]) -> Option<String> {
     if !line.starts_with('/') {
@@ -49,6 +87,16 @@ pub fn suggest(line: &str, models: &[String]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_commands_point_to_the_closest_real_one() {
+        assert_eq!(closest("/remote"), Some("/pair"));
+        assert_eq!(closest("/stauts"), Some("/status"));
+        assert_eq!(closest("/modle opus"), Some("/model"));
+        assert_eq!(closest("/Resume"), Some("/resume"));
+        assert_eq!(closest("/teleport"), None);
+        assert_eq!(distance("kitten", "sitting"), 3);
+    }
 
     fn models() -> Vec<String> {
         vec!["gpt-6.1-sol".to_string(), "gpt-6-luna".to_string()]
