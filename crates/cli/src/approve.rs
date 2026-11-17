@@ -274,7 +274,7 @@ fn draw(options: &[Choice], labels: &[String], selected: usize, mode: Mode) {
     let _ = out.flush();
 }
 
-fn erase(lines: usize) {
+pub fn erase(lines: usize) {
     let rows = u16::try_from(lines).unwrap_or(u16::MAX);
     let _ = execute!(
         io::stdout(),

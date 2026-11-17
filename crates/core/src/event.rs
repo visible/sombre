@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::{Value, json};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -42,12 +43,31 @@ pub enum Event {
         always: Option<String>,
         rules: Value,
     },
+    Questions {
+        id: String,
+        input: Value,
+        questions: Vec<Question>,
+    },
     Done {
         millis: Option<u64>,
         cost: Option<f64>,
         left: Option<u8>,
     },
     Failed(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Question {
+    pub header: String,
+    pub text: String,
+    pub choices: Vec<Choice>,
+    pub multiple: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Choice {
+    pub label: String,
+    pub about: String,
 }
 
 impl Event {
@@ -104,6 +124,30 @@ impl Event {
                 reason: clean(reason),
                 rules,
                 tool: clean(tool),
+            },
+            Self::Questions {
+                id,
+                input,
+                questions,
+            } => Self::Questions {
+                id,
+                input,
+                questions: questions
+                    .into_iter()
+                    .map(|question| Question {
+                        choices: question
+                            .choices
+                            .into_iter()
+                            .map(|choice| Choice {
+                                about: clean(choice.about),
+                                label: clean(choice.label),
+                            })
+                            .collect(),
+                        header: clean(question.header),
+                        multiple: question.multiple,
+                        text: clean(question.text),
+                    })
+                    .collect(),
             },
             other => other,
         }
@@ -165,6 +209,17 @@ pub fn claude(line: &str) -> Vec<Event> {
         Some("user") => result(&entry),
         Some("assistant") if entry["is_api_error_message"] == true => Vec::new(),
         Some("assistant") => blocks(&entry["message"]["content"]),
+        Some("control_request")
+            if entry["request"]["subtype"] == "can_use_tool"
+                && entry["request"]["tool_name"] == "AskUserQuestion"
+                && !questions(&entry["request"]["input"]).is_empty() =>
+        {
+            vec![Event::Questions {
+                id: entry["request_id"].as_str().unwrap_or_default().to_string(),
+                input: entry["request"]["input"].clone(),
+                questions: questions(&entry["request"]["input"]),
+            }]
+        }
         Some("control_request") if entry["request"]["subtype"] == "can_use_tool" => {
             let request = &entry["request"];
             let tool = request["tool_name"].as_str().unwrap_or("tool").to_string();
@@ -248,6 +303,54 @@ pub fn remember(id: &str, input: &Value, rules: &Value) -> String {
         id,
         &json!({"behavior": "allow", "updatedInput": input, "updatedPermissions": rules}),
     )
+}
+
+pub fn answered(id: &str, input: &Value, answers: &[String]) -> String {
+    let mut updated = input.clone();
+    updated["answers"] = input["questions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .zip(answers)
+        .filter_map(|(question, answer)| {
+            Some((
+                question["question"].as_str()?.to_string(),
+                Value::String(answer.clone()),
+            ))
+        })
+        .collect::<serde_json::Map<_, _>>()
+        .into();
+    reply(id, &json!({"behavior": "allow", "updatedInput": updated}))
+}
+
+pub(crate) fn questions(input: &Value) -> Vec<Question> {
+    let field =
+        |value: &Value, key: &str| value[key].as_str().unwrap_or_default().trim().to_string();
+    input["questions"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .map(|question| Question {
+                    choices: question["options"]
+                        .as_array()
+                        .map(|options| {
+                            options
+                                .iter()
+                                .map(|option| Choice {
+                                    about: field(option, "description"),
+                                    label: field(option, "label"),
+                                })
+                                .filter(|choice| !choice.label.is_empty())
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    header: field(question, "header"),
+                    multiple: question["multiSelect"].as_bool().unwrap_or(false),
+                    text: field(question, "question"),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub fn permission(mode: &str) -> String {
@@ -460,6 +563,7 @@ pub(crate) fn label(tool: &str) -> &str {
         "Grep" | "Glob" => "Find",
         "WebFetch" | "WebSearch" => "Web",
         "Task" | "Agent" => "Task",
+        "AskUserQuestion" => "Ask",
         other => other,
     }
 }
@@ -472,6 +576,12 @@ pub(crate) fn summary(tool: &str, input: &Value) -> String {
         "WebFetch" => "url",
         "WebSearch" => "query",
         "Task" | "Agent" => "description",
+        "AskUserQuestion" => {
+            return input["questions"][0]["question"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+        }
         _ => return String::new(),
     };
     input[key].as_str().unwrap_or_default().to_string()
@@ -597,6 +707,72 @@ mod tests {
                 },
             ]
         );
+    }
+
+    const ASK: &str = r#"{"type":"control_request","request_id":"q1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","display_name":"AskUserQuestion","input":{"questions":[{"question":"Which color should the button be?","header":"Color","options":[{"label":"Ember","description":"The brand orange"},{"label":"Ink","description":"Plain and dark"}],"multiSelect":false},{"question":"Which pages need it?","header":"Pages","options":[{"label":"Home","description":""},{"label":"Docs","description":""}],"multiSelect":true}]},"requires_user_interaction":true,"tool_use_id":"t9"}}"#;
+
+    #[test]
+    fn claude_turns_ask_user_question_into_questions() {
+        let events = claude(ASK);
+        let [
+            Event::Questions {
+                id,
+                questions,
+                input,
+            },
+        ] = events.as_slice()
+        else {
+            panic!("expected questions");
+        };
+        assert_eq!(id, "q1");
+        assert_eq!(input["questions"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            questions[0],
+            Question {
+                choices: vec![
+                    Choice {
+                        about: "The brand orange".to_string(),
+                        label: "Ember".to_string(),
+                    },
+                    Choice {
+                        about: "Plain and dark".to_string(),
+                        label: "Ink".to_string(),
+                    },
+                ],
+                header: "Color".to_string(),
+                multiple: false,
+                text: "Which color should the button be?".to_string(),
+            }
+        );
+        assert!(questions[1].multiple);
+    }
+
+    #[test]
+    fn answers_go_back_inside_the_original_questions() {
+        let events = claude(ASK);
+        let [Event::Questions { input, .. }] = events.as_slice() else {
+            panic!("expected questions");
+        };
+        let line = answered(
+            "q1",
+            input,
+            &["Ember".to_string(), "Home, Docs".to_string()],
+        );
+        let sent: Value = serde_json::from_str(&line).unwrap_or_default();
+        let response = &sent["response"]["response"];
+        assert_eq!(sent["response"]["request_id"], "q1");
+        assert_eq!(response["behavior"], "allow");
+        assert_eq!(response["updatedInput"]["questions"], input["questions"]);
+        assert_eq!(
+            response["updatedInput"]["answers"],
+            json!({"Which color should the button be?": "Ember", "Which pages need it?": "Home, Docs"})
+        );
+    }
+
+    #[test]
+    fn a_question_without_any_text_stays_an_approval() {
+        let line = r#"{"type":"control_request","request_id":"q2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]}}}"#;
+        assert!(matches!(claude(line).as_slice(), [Event::Approval { .. }]));
     }
 
     #[test]

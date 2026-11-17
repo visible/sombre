@@ -37,6 +37,7 @@ pub enum Inbound {
         images: Vec<Vec<u8>>,
     },
     Answer(bool),
+    Reply(Option<Vec<String>>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -136,6 +137,19 @@ pub fn inbound(plain: &[u8]) -> Option<Inbound> {
             })
         }
         "answer" => message["yes"].as_bool().map(Inbound::Answer),
+        "reply" => Some(Inbound::Reply(message["answers"].as_array().map(
+            |answers| {
+                answers
+                    .iter()
+                    .take(SEEN)
+                    .map(|answer| {
+                        sombre_core::scrub::scrub(answer.as_str().unwrap_or_default())
+                            .trim()
+                            .to_string()
+                    })
+                    .collect()
+            },
+        ))),
         _ => None,
     }
 }
@@ -624,6 +638,7 @@ struct Session {
     link: Link,
     messages: Mutex<VecDeque<Arrival>>,
     answers: Mutex<VecDeque<bool>>,
+    replies: Mutex<VecDeque<Option<Vec<String>>>>,
     stop: AtomicBool,
 }
 
@@ -711,6 +726,11 @@ fn pull(session: &Session) {
                 Some(Inbound::Answer(yes)) => {
                     if let Ok(mut answers) = session.answers.lock() {
                         answers.push_back(yes);
+                    }
+                }
+                Some(Inbound::Reply(answers)) => {
+                    if let Ok(mut replies) = session.replies.lock() {
+                        replies.push_back(answers);
                     }
                 }
                 None => {}
@@ -807,6 +827,7 @@ fn start(link: Link, key: [u8; 32]) -> Arc<Session> {
     };
     let session = Arc::new(Session {
         answers: Mutex::new(VecDeque::new()),
+        replies: Mutex::new(VecDeque::new()),
         keys: Mutex::new((key, None)),
         link,
         messages: Mutex::new(VecDeque::new()),
@@ -1185,6 +1206,10 @@ pub fn answer() -> Option<bool> {
     live()?.answers.lock().ok()?.pop_front()
 }
 
+pub fn replied() -> Option<Option<Vec<String>>> {
+    live()?.replies.lock().ok()?.pop_front()
+}
+
 fn served(name: &str, built: &str) -> String {
     std::env::var_os("SOMBRE_PHONE")
         .and_then(|folder| std::fs::read_to_string(Path::new(&folder).join(name)).ok())
@@ -1253,6 +1278,22 @@ pub fn mirror(item: &sombre_core::Event) {
             change,
             ..
         } => json!({"kind": "approval", "tool": tool, "detail": detail, "change": change}),
+        Event::Questions { questions, .. } => json!({
+            "kind": "questions",
+            "questions": questions
+                .iter()
+                .map(|question| json!({
+                    "header": question.header,
+                    "multiple": question.multiple,
+                    "text": question.text,
+                    "choices": question
+                        .choices
+                        .iter()
+                        .map(|choice| json!({"label": choice.label, "about": choice.about}))
+                        .collect::<Vec<_>>(),
+                }))
+                .collect::<Vec<_>>(),
+        }),
         Event::Failed(text) => json!({"kind": "failed", "text": text}),
         Event::Note(text) => json!({"kind": "note", "text": text}),
         _ => return,
@@ -1298,6 +1339,7 @@ mod tests {
     fn session(link: Link) -> Session {
         Session {
             answers: Mutex::new(VecDeque::new()),
+            replies: Mutex::new(VecDeque::new()),
             keys: Mutex::new(([7; 32], None)),
             link,
             messages: Mutex::new(VecDeque::new()),
@@ -1359,6 +1401,17 @@ mod tests {
             })
         );
         assert_eq!(inbound(br#"{"kind":"permissions","mode":"yolo"}"#), None);
+        assert_eq!(
+            inbound(br#"{"kind":"reply","answers":[" Ember ","Home, \u001b[2JDocs"]}"#),
+            Some(Inbound::Reply(Some(vec![
+                "Ember".to_string(),
+                "Home, Docs".to_string()
+            ])))
+        );
+        assert_eq!(
+            inbound(br#"{"kind":"reply","answers":null}"#),
+            Some(Inbound::Reply(None))
+        );
     }
 
     #[test]

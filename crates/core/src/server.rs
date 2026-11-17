@@ -25,6 +25,22 @@ pub fn answer(id: &Value, decision: &Value) -> String {
     json!({"id": id, "result": {"decision": decision}}).to_string()
 }
 
+pub fn replied(input: &Value, answers: &[String]) -> String {
+    let answers: serde_json::Map<String, Value> = input["questions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .zip(answers)
+        .filter_map(|(question, answer)| {
+            Some((
+                question["id"].as_str()?.to_string(),
+                json!({"answers": [answer]}),
+            ))
+        })
+        .collect();
+    json!({"id": input["id"], "result": {"answers": answers}}).to_string()
+}
+
 fn text(value: &Value) -> String {
     value.as_str().unwrap_or_default().to_string()
 }
@@ -302,6 +318,13 @@ impl Server {
                     reason: text(&params["reason"]),
                     rules: json!("acceptForSession"),
                     tool: "Edit".to_string(),
+                }]
+            }
+            "item/tool/requestUserInput" if !crate::event::questions(params).is_empty() => {
+                vec![Event::Questions {
+                    id: id.to_string(),
+                    input: json!({"id": id, "questions": params["questions"]}),
+                    questions: crate::event::questions(params),
                 }]
             }
             _ => {
@@ -720,6 +743,32 @@ mod tests {
                 millis: Some(8386)
             }]
         );
+    }
+
+    #[test]
+    fn codex_questions_come_through_and_answers_go_back_by_id() {
+        let mut server = Server::default();
+        let events = server.read(r#"{"method":"item/tool/requestUserInput","id":9,"params":{"threadId":"t","turnId":"u","itemId":"i","isBlocking":true,"questions":[{"id":"scope","header":"Scope","question":"Which part should change?","isOther":true,"isSecret":false,"options":[{"label":"Just the api","description":"Leave the ui alone"},{"label":"Everything","description":""}]}]}}"#);
+        let [
+            Event::Questions {
+                input, questions, ..
+            },
+        ] = events.as_slice()
+        else {
+            panic!("expected questions");
+        };
+        assert_eq!(questions[0].text, "Which part should change?");
+        assert_eq!(questions[0].choices[0].label, "Just the api");
+        assert!(!questions[0].multiple);
+        let reply: Value =
+            serde_json::from_str(&replied(input, &["Everything".to_string()])).unwrap_or_default();
+        assert_eq!(reply["id"], 9);
+        assert_eq!(
+            reply["result"]["answers"],
+            json!({"scope": {"answers": ["Everything"]}})
+        );
+        let skipped: Value = serde_json::from_str(&replied(input, &[])).unwrap_or_default();
+        assert_eq!(skipped["result"]["answers"], json!({}));
     }
 
     #[test]

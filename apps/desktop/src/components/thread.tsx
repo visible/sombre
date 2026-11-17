@@ -43,6 +43,7 @@ import {
   note,
   remember,
   remembered,
+  resolve,
   respond,
   retitle,
   retune,
@@ -60,6 +61,7 @@ import { Find } from "./find";
 import { Header } from "./header";
 import { Home } from "./home";
 import { Notice } from "./notice";
+import { Questions } from "./questions";
 import { Review } from "./review";
 import { Start } from "./start";
 import { Work } from "./work";
@@ -334,6 +336,16 @@ const Parts = ({
               key={part.key}
               onAnswer={(choice) => respond(chatKey, entry.ask, choice)}
               onCycle={onCycle}
+            />
+          );
+        }
+        if (entry.kind === "questions") {
+          return (
+            <Questions
+              agent={names[agent]}
+              entry={entry}
+              key={part.key}
+              onReply={(answers) => resolve(chatKey, entry.ask, answers)}
             />
           );
         }

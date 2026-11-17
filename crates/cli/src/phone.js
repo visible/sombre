@@ -528,6 +528,62 @@ const recall = (name) => {
   return kept;
 };
 
+const field = (asked) => {
+  const set = element("fieldset", "question");
+  const legend = element("legend");
+  if (asked.header) {
+    legend.append(element("span", "topic", asked.header));
+  }
+  legend.append(element("span", "", asked.text));
+  set.append(legend);
+  const group = ticket();
+  const typed = element("input", "other");
+  typed.type = "text";
+  typed.placeholder = "type your answer";
+  typed.maxLength = 500;
+  typed.hidden = true;
+  typed.setAttribute("aria-label", "your answer");
+  const choices = [
+    ...asked.choices,
+    { about: "", label: "something else", other: true },
+  ];
+  for (const choice of choices) {
+    const label = element("label", "pick");
+    const box = element("input");
+    box.type = asked.multiple ? "checkbox" : "radio";
+    box.name = group;
+    box.value = choice.label;
+    if (choice.other) {
+      box.dataset.other = "";
+    }
+    const caption = element("span", "words");
+    caption.append(element("span", "name", choice.label));
+    if (choice.about) {
+      caption.append(element("span", "about", choice.about));
+    }
+    label.append(box, caption);
+    set.append(label);
+  }
+  set.append(typed);
+  const other = set.querySelector("[data-other]");
+  set.addEventListener("change", () => {
+    const closed = typed.hidden;
+    typed.hidden = !other.checked;
+    if (other.checked && closed) {
+      typed.focus();
+    }
+  });
+  const value = () => {
+    const picked = [...set.querySelectorAll("input:checked")];
+    const text = typed.value.trim();
+    if (picked.length === 0 || (other.checked && !text)) {
+      return null;
+    }
+    return picked.map((box) => (box === other ? text : box.value)).join(", ");
+  };
+  return { set, value };
+};
+
 const outcome = (yes) => {
   if (yes === null) {
     return element("p", "said", "answered");
@@ -733,11 +789,13 @@ const start = () => {
     const card = [...waiting].at(-1);
     banner.hidden = !card;
     if (card) {
-      document.title = "approval needed · sombre";
+      const kind = card.dataset.kind === "questions" ? "question" : "approval";
+      banner.textContent = `${kind} waiting · tap to see it`;
+      document.title = `${kind} needed · sombre`;
       if (state.joined) {
         navigator.vibrate?.(200);
       }
-    } else if (document.title.startsWith("approval")) {
+    } else if (document.title.endsWith("needed · sombre")) {
       document.title = "sombre";
     }
   };
@@ -993,10 +1051,65 @@ const start = () => {
     card.querySelector(".choices")?.replaceWith(outcome(yes));
     waiting.delete(card);
   };
+  const answered = (card, answers) => {
+    for (const control of card.querySelectorAll("input, button")) {
+      control.disabled = true;
+    }
+    const result = element("div", "answers");
+    if (answers) {
+      for (const answer of answers) {
+        result.append(element("p", "said", answer));
+      }
+    } else {
+      result.append(element("p", "said no", "skipped"));
+    }
+    card.querySelector(".choices")?.replaceWith(result);
+    waiting.delete(card);
+  };
   const decide = (yes) => {
     for (const card of waiting) {
-      close(card, yes);
+      if (card.dataset.kind === "questions") {
+        answered(card, null);
+      } else {
+        close(card, yes);
+      }
     }
+    attention();
+  };
+  const questions = (message) => {
+    settle();
+    const card = element("section", "ask");
+    card.dataset.kind = "questions";
+    card.setAttribute("aria-live", "assertive");
+    card.append(element("h2", "", `${state.agent || "your agent"} asks`));
+    const fields = message.questions.map(field);
+    card.append(...fields.map((each) => each.set));
+    const row = element("div", "choices");
+    const skip = element("button", "key", "skip");
+    const submit = element("button", "key yes", "send");
+    skip.type = "button";
+    submit.type = "button";
+    const ready = () => {
+      submit.disabled = !fields.every((each) => each.value());
+    };
+    card.addEventListener("input", ready);
+    card.addEventListener("change", ready);
+    ready();
+    waiting.add(card);
+    const reply = async (answers) => {
+      answered(card, answers);
+      attention();
+      outbox.push({ id: ticket(), value: { answers, kind: "reply" } });
+      store();
+      await deliver();
+    };
+    skip.addEventListener("click", () => reply(null));
+    submit.addEventListener("click", () =>
+      reply(fields.map((each) => each.value()))
+    );
+    row.append(skip, submit);
+    card.append(row);
+    add(card);
     attention();
   };
   const ask = (message) => {
@@ -1077,7 +1190,20 @@ const start = () => {
       add(line);
     }
   };
+  const settled = (message) => {
+    for (const card of waiting) {
+      if (card.dataset.kind === "questions") {
+        answered(card, message.answers);
+      }
+    }
+    attention();
+  };
+  const handlers = { answered: settled, questions };
   const show = (message) => {
+    if (Object.hasOwn(handlers, message.kind)) {
+      handlers[message.kind](message);
+      return;
+    }
     switch (message.kind) {
       case "hello": {
         hello(message);

@@ -647,6 +647,94 @@
         content: "✕ ";
         color: var(--fog);
       }
+      .question {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .question legend {
+        margin-bottom: 4px;
+        padding: 0;
+        color: var(--paper);
+      }
+      .question .topic {
+        display: block;
+        color: var(--fog);
+        font-size: 12px;
+      }
+      .pick {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        min-height: 44px;
+        padding: 11px 12px;
+        border: 1px solid var(--rim);
+        border-radius: 10px;
+        cursor: pointer;
+        transition: border-color 120ms;
+      }
+      .pick:hover {
+        border-color: var(--fog);
+      }
+      .pick:active {
+        background: var(--well);
+      }
+      .pick:has(input:checked) {
+        border-color: var(--ember);
+      }
+      .pick:has(input:focus-visible) {
+        outline: 2px solid var(--ember);
+        outline-offset: 2px;
+      }
+      .pick:has(input:disabled) {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .pick input {
+        flex: none;
+        width: 16px;
+        height: 16px;
+        margin: 2px 0 0;
+        accent-color: var(--ember);
+      }
+      .pick .words {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .pick .name {
+        color: var(--paper);
+      }
+      .pick .about {
+        color: var(--fog);
+        font-size: 13px;
+      }
+      .other {
+        min-height: 44px;
+        padding: 0 12px;
+        border: 1px solid var(--rim);
+        border-radius: 10px;
+        background: var(--ink);
+        color: var(--paper);
+        font: inherit;
+      }
+      .other:focus-visible {
+        border-color: var(--ember);
+        outline: none;
+      }
+      .answers {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .answers p {
+        margin: 0;
+      }
       form {
         position: fixed;
         inset: auto 0 var(--keyboard, 0px);

@@ -1828,7 +1828,7 @@ fn pump(
                 Event::Output { id, .. } | Event::Patch { id, .. } => {
                     Some(last.as_deref() == Some(id.as_str()))
                 }
-                Event::Approval { .. } => Some(true),
+                Event::Approval { .. } | Event::Questions { .. } => Some(true),
                 _ => Some(false),
             };
             if let Some(keep) = keep {
@@ -1927,6 +1927,26 @@ fn pump(
                         outcome.refused = true;
                     }
                     if engine.answer(&item, choice.into()).is_err() {
+                        view::failed("the agent stopped before it got the answer");
+                        return false;
+                    }
+                }
+                Event::Questions { .. } => {
+                    if long(started) {
+                        view::notify(&format!("{} has a question for you", engine.name()));
+                    }
+                    dock.wait();
+                    let answers = crate::question::answer(engine.name(), &item);
+                    crate::relay::post(&serde_json::json!({
+                        "answers": answers,
+                        "kind": "answered",
+                    }));
+                    dock.relabel(footer(engine));
+                    if answers.is_none() && engine.agent == Agent::Claude {
+                        halted = true;
+                        outcome.refused = true;
+                    }
+                    if engine.reply(&item, answers.as_deref()).is_err() {
                         view::failed("the agent stopped before it got the answer");
                         return false;
                     }

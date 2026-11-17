@@ -27,6 +27,8 @@ export interface Live {
 
 export type Asked = Entry & { kind: "ask" };
 
+export type Quiz = Entry & { kind: "questions" };
+
 export const initial = (mode: Mode = "ask"): Live => ({
   busy: false,
   cost: null,
@@ -99,6 +101,19 @@ export const answered = (live: Live, ask: string, choice: Choice): Live => ({
   entries: live.entries.map((entry) =>
     entry.kind === "ask" && entry.ask === ask
       ? { ...entry, answer: choice }
+      : entry
+  ),
+});
+
+export const replied = (
+  live: Live,
+  ask: string,
+  answers: string[] | null
+): Live => ({
+  ...live,
+  entries: live.entries.map((entry) =>
+    entry.kind === "questions" && entry.ask === ask
+      ? { ...entry, answers, settled: true }
       : entry
   ),
 });
@@ -179,6 +194,15 @@ export const apply = (live: Live, update: Update, now: number): Live => {
         tool: update.tool,
       });
     }
+    case "questions": {
+      return push(live, {
+        answers: null,
+        ask: update.id,
+        kind: "questions",
+        questions: update.questions,
+        settled: false,
+      });
+    }
     case "granted": {
       return answered(live, update.id, "yes");
     }
@@ -237,9 +261,11 @@ export const marked = (text: string, count: number) =>
     .filter((part) => part !== "")
     .join(" ");
 
-export const waiting = (live: Live): Asked | undefined =>
+export const waiting = (live: Live): Asked | Quiz | undefined =>
   live.entries.find(
-    (entry): entry is Asked => entry.kind === "ask" && entry.answer === null
+    (entry): entry is Asked | Quiz =>
+      (entry.kind === "ask" && entry.answer === null) ||
+      (entry.kind === "questions" && !entry.settled)
   );
 
 export type Flag = "busy" | "ask" | "new" | "failed";

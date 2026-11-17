@@ -142,6 +142,13 @@ export interface Model {
   about: string;
 }
 
+export interface Question {
+  header: string;
+  text: string;
+  choices: { label: string; about: string }[];
+  multiple: boolean;
+}
+
 export type Item =
   | { kind: "user"; text: string; steered?: boolean; images?: string[] }
   | { kind: "text"; text: string }
@@ -164,6 +171,13 @@ export type Item =
       change: string[];
       always: string | null;
       answer: Choice | null;
+    }
+  | {
+      kind: "questions";
+      ask: string;
+      questions: Question[];
+      answers: string[] | null;
+      settled: boolean;
     }
   | { kind: "note"; text: string }
   | { kind: "failed"; text: string }
@@ -201,6 +215,7 @@ export type Update =
       change: string[];
       always: string | null;
     }
+  | { kind: "questions"; id: string; questions: Question[] }
   | { kind: "granted"; id: string }
   | { kind: "note"; text: string }
   | { kind: "failed"; text: string }
@@ -271,6 +286,9 @@ export const steer = (key: string, text: string) =>
 
 export const answer = (key: string, id: string, choice: Choice) =>
   invoke<null>("answer", { choice, id, key });
+
+export const tell = (key: string, id: string, answers: string[] | null) =>
+  invoke<null>("reply", { answers, id, key });
 
 export const stop = (key: string) => invoke<null>("stop", { key });
 

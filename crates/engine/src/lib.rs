@@ -382,6 +382,18 @@ impl Engine {
         self.write(&line)
     }
 
+    pub fn reply(&mut self, item: &Event, answers: Option<&[String]>) -> io::Result<()> {
+        let Event::Questions { id, input, .. } = item else {
+            return Ok(());
+        };
+        let line = match (&self.server, answers) {
+            (Some(_), answers) => server::replied(input, answers.unwrap_or_default()),
+            (None, Some(answers)) => event::answered(id, input, answers),
+            (None, None) => event::halt(id),
+        };
+        self.write(&line)
+    }
+
     pub fn next(&mut self, wait: Duration) -> Next {
         if let Some(turn) = &self.turn {
             return match turn.events.recv_timeout(wait) {
@@ -835,6 +847,13 @@ mod tests {
         assert!(!covers(Mode::Auto, &asking("Bash")));
         assert!(covers(Mode::Yolo, &asking("Bash")));
         assert!(!covers(Mode::Yolo, &Event::Echo));
+        let questions = Event::Questions {
+            id: "q1".to_string(),
+            input: Value::Null,
+            questions: Vec::new(),
+        };
+        assert!(!covers(Mode::Yolo, &questions));
+        assert!(!covers(Mode::Auto, &questions));
     }
 
     #[test]

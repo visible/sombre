@@ -12,6 +12,7 @@ mod markdown;
 mod menu;
 mod pane;
 mod provider;
+mod question;
 mod relay;
 mod size;
 mod streak;

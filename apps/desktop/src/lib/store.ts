@@ -23,6 +23,7 @@ import {
   start,
   steer,
   stop,
+  tell,
   tune,
 } from "./api";
 import { numbers } from "./inbox";
@@ -33,6 +34,7 @@ import {
   initial,
   mark,
   marked,
+  replied,
   restored,
   said,
   steering,
@@ -205,7 +207,8 @@ const listen = (key: string, agent: Agent) => (update: Update) => {
   if (update.kind === "changes") {
     save(key, agent, after, update);
   }
-  if (update.kind === "ask" && !waiting(before) && away(key)) {
+  const asking = update.kind === "ask" || update.kind === "questions";
+  if (asking && !waiting(before) && away(key)) {
     alerting(key, "ask");
   }
   if (before.busy && !after.busy && !after.stopping && away(key)) {
@@ -215,7 +218,7 @@ const listen = (key: string, agent: Agent) => (update: Update) => {
   if (update.kind === "state" && update.session) {
     aliases.set(`${agent}:${update.session}`, key);
   }
-  if (update.kind === "ask" || update.kind === "done") {
+  if (asking || update.kind === "done") {
     nudge();
   }
   if (before.busy && !after.busy) {
@@ -381,6 +384,19 @@ export const respond = async (key: string, ask: string, choice: Choice) => {
   write(key, (live) => answered(live, ask, choice));
   try {
     await answer(key, ask, choice);
+  } catch (error) {
+    fail(key, error);
+  }
+};
+
+export const resolve = async (
+  key: string,
+  ask: string,
+  answers: string[] | null
+) => {
+  write(key, (live) => replied(live, ask, answers));
+  try {
+    await tell(key, ask, answers);
   } catch (error) {
     fail(key, error);
   }

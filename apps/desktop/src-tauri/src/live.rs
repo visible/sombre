@@ -8,6 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use sombre_core::event::Question;
 use sombre_core::{Agent, Event, Roots};
 use sombre_engine::goal::{self, Goal, Outcome, Status};
 use sombre_engine::{Engine, Next, covers, git, shell};
@@ -90,6 +91,10 @@ pub enum Update {
         reason: String,
         change: Vec<String>,
         always: Option<String>,
+    },
+    Questions {
+        id: String,
+        questions: Vec<Question>,
     },
     Granted {
         id: String,
@@ -291,6 +296,9 @@ impl Gate {
                 reason,
                 tool,
             }),
+            Event::Questions { id, questions, .. } => {
+                Pass::Ask(Update::Questions { id, questions })
+            }
             Event::Done { millis, cost, left } => Pass::Done {
                 cost,
                 last: self.agent != Agent::Claude || self.echoed >= self.sent,
@@ -316,6 +324,7 @@ pub enum Ask {
     Compact,
     Steer(String, Sender<bool>),
     Answer(String, Answer),
+    Reply(String, Option<Vec<String>>),
     Tune(Tuning, Sender<Result<String, String>>),
     Stop,
     Close,
@@ -451,6 +460,7 @@ impl Runner {
                 let _ = reply.send(sent);
             }
             Ask::Answer(id, choice) => self.answer(&id, choice),
+            Ask::Reply(id, answers) => self.reply(&id, answers),
             Ask::Tune(tuning, reply) => {
                 let _ = reply.send(self.tune(tuning));
             }
@@ -741,6 +751,21 @@ impl Runner {
         }
     }
 
+    fn reply(&mut self, id: &str, answers: Option<Vec<String>>) {
+        let Some(item) = self.waiting.remove(id) else {
+            return;
+        };
+        if answers.is_none() && self.engine.agent == Agent::Claude {
+            self.gate.refuse();
+        }
+        if self.engine.reply(&item, answers.as_deref()).is_err() {
+            self.emit(Update::Failed {
+                text: "the agent stopped before it got the answer".to_string(),
+            });
+            self.settle();
+        }
+    }
+
     fn grant(&mut self) {
         let covered: Vec<String> = self
             .waiting
@@ -841,7 +866,8 @@ impl Runner {
     }
 
     fn apply(&mut self, event: Event) {
-        let approval = matches!(event, Event::Approval { .. }).then(|| event.clone());
+        let approval = matches!(event, Event::Approval { .. } | Event::Questions { .. })
+            .then(|| event.clone());
         match self.gate.pass(event) {
             Pass::Skip => {}
             Pass::Show(update) => self.emit(update),
@@ -854,7 +880,9 @@ impl Runner {
                 self.state();
             }
             Pass::Ask(update) => {
-                if let (Some(item), Update::Ask { id, .. }) = (approval, &update) {
+                if let (Some(item), Update::Ask { id, .. } | Update::Questions { id, .. }) =
+                    (approval, &update)
+                {
                     let covered = covers(self.engine.mode, &item);
                     self.waiting.insert(id.clone(), item);
                     if covered {
@@ -1191,6 +1219,30 @@ mod tests {
             }),
             Pass::Done { .. }
         ));
+    }
+
+    #[test]
+    fn questions_wait_for_an_answer_in_every_mode() {
+        let mut gate = Gate::new(Agent::Claude, Path::new("/work"));
+        let asked = vec![Question {
+            choices: Vec::new(),
+            header: "Color".to_string(),
+            multiple: false,
+            text: "Which color?".to_string(),
+        }];
+        let item = Event::Questions {
+            id: "q1".to_string(),
+            input: serde_json::Value::Null,
+            questions: asked.clone(),
+        };
+        assert!(!covers(Mode::Yolo, &item));
+        assert_eq!(
+            gate.pass(item),
+            Pass::Ask(Update::Questions {
+                id: "q1".to_string(),
+                questions: asked
+            })
+        );
     }
 
     #[test]

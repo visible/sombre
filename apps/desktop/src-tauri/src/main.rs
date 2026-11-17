@@ -646,6 +646,16 @@ fn answer(live: State<'_, Live>, key: String, id: String, choice: Choice) -> Res
 }
 
 #[tauri::command]
+fn reply(
+    live: State<'_, Live>,
+    key: String,
+    id: String,
+    answers: Option<Vec<String>>,
+) -> Result<(), String> {
+    live.tell(&key, Ask::Reply(id, answers))
+}
+
+#[tauri::command]
 fn stop(live: State<'_, Live>, key: String) -> Result<(), String> {
     live.tell(&key, Ask::Stop)
 }
@@ -718,6 +728,7 @@ fn main() {
             send,
             steer,
             answer,
+            reply,
             stop,
             tune,
             rename,

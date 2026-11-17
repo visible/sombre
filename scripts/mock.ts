@@ -12,6 +12,7 @@ interface Message {
   text?: string;
   now?: boolean;
   yes?: boolean;
+  answers?: string[] | null;
   images?: Image[];
 }
 
@@ -50,6 +51,38 @@ const answer = (message: Message) => {
     kind: "user",
     text: [message.text, marks].filter(Boolean).join("\n"),
   });
+  if (message.text?.includes("ask")) {
+    push({
+      kind: "questions",
+      questions: [
+        {
+          choices: [
+            { about: "The brand orange", label: "Ember" },
+            { about: "Plain and dark", label: "Ink" },
+          ],
+          header: "Color",
+          multiple: false,
+          text: "Which color should the button be?",
+        },
+        {
+          choices: [
+            { about: "", label: "Home" },
+            { about: "", label: "Docs" },
+          ],
+          header: "Pages",
+          multiple: true,
+          text: "Which pages need it?",
+        },
+      ],
+    });
+    if (message.text.includes("mac")) {
+      setTimeout(
+        () => push({ answers: ["Ink", "Home"], kind: "answered" }),
+        2500
+      );
+    }
+    return;
+  }
   if (message.text?.includes("approve")) {
     push({
       change: ["-rm -rf build", "+rm -rf target/debug"],
@@ -139,6 +172,15 @@ const server = Bun.serve({
       seen.add(id);
       if (message.kind === "message") {
         answer(message);
+      } else if (message.kind === "reply") {
+        push({ answers: message.answers ?? null, kind: "answered" });
+        push({
+          kind: "text",
+          text: message.answers
+            ? `You picked ${message.answers.join(" and ")}.`
+            : "Skipped. Tell me what to do instead.",
+        });
+        push({ cost: 0.01, kind: "done", left: 72 });
       } else if (message.kind === "answer") {
         push({ kind: "decided", yes: message.yes });
         push({ cost: 0.01, kind: "done", left: 72 });
@@ -160,4 +202,7 @@ console.log(
 );
 console.log(
   'send "approve" to see an approval card, "approve mac" to see it answered on the mac'
+);
+console.log(
+  'send "ask" to see a question card, "ask mac" to see it answered on the mac'
 );
