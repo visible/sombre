@@ -2,6 +2,7 @@ import type { KeyboardEvent } from "react";
 import { useEffect, useRef } from "react";
 
 import type { Choice } from "../lib/api";
+import { armed, typing } from "../lib/arm";
 import { diff } from "../lib/format";
 import type { Asked } from "../lib/live";
 import { asked } from "../lib/live";
@@ -42,12 +43,23 @@ const answers: Record<Choice, string> = {
 
 export const Ask = ({ entry, agent, onAnswer, onCycle }: Props) => {
   const first = useRef<HTMLButtonElement>(null);
+  const since = useRef(Number.POSITIVE_INFINITY);
 
   useEffect(() => {
-    if (entry.answer === null) {
+    if (entry.answer !== null) {
+      return;
+    }
+    since.current = performance.now();
+    if (!typing(document.activeElement)) {
       first.current?.focus();
     }
   }, [entry.answer]);
+
+  const choose = (choice: Choice) => {
+    if (armed(since.current, performance.now())) {
+      onAnswer(choice);
+    }
+  };
 
   if (entry.answer !== null) {
     return (
@@ -71,9 +83,15 @@ export const Ask = ({ entry, agent, onAnswer, onCycle }: Props) => {
   const lines = diff(entry.change.slice(0, 40));
 
   const keys = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.repeat) {
+      event.preventDefault();
+      return;
+    }
     if (event.key === "Tab" && event.shiftKey) {
       event.preventDefault();
-      onCycle();
+      if (armed(since.current, performance.now())) {
+        onCycle();
+      }
       return;
     }
     if (move(event)) {
@@ -81,12 +99,12 @@ export const Ask = ({ entry, agent, onAnswer, onCycle }: Props) => {
     }
     const key = event.key.toLowerCase();
     if (key === "y") {
-      onAnswer("yes");
+      choose("yes");
     } else if (key === "a" && entry.always) {
-      onAnswer("always");
+      choose("always");
     } else if (key === "n" || key === "escape") {
       event.stopPropagation();
-      onAnswer("no");
+      choose("no");
     }
   };
 
@@ -117,7 +135,7 @@ export const Ask = ({ entry, agent, onAnswer, onCycle }: Props) => {
       <div className="flex flex-wrap gap-2">
         <button
           className="bg-ember text-ink focus-visible:outline-paper min-h-9 cursor-pointer rounded-lg px-3.5 font-semibold hover:brightness-110 active:brightness-95"
-          onClick={() => onAnswer("yes")}
+          onClick={() => choose("yes")}
           onKeyDown={keys}
           ref={first}
           type="button"
@@ -127,7 +145,7 @@ export const Ask = ({ entry, agent, onAnswer, onCycle }: Props) => {
         {entry.always ? (
           <button
             className="border-rim text-paper hover:border-fog active:bg-well min-h-9 cursor-pointer rounded-lg border px-3.5 text-left"
-            onClick={() => onAnswer("always")}
+            onClick={() => choose("always")}
             onKeyDown={keys}
             type="button"
           >
@@ -136,7 +154,7 @@ export const Ask = ({ entry, agent, onAnswer, onCycle }: Props) => {
         ) : null}
         <button
           className="border-rim text-paper hover:border-fog active:bg-well min-h-9 cursor-pointer rounded-lg border px-3.5 text-left"
-          onClick={() => onAnswer("no")}
+          onClick={() => choose("no")}
           onKeyDown={keys}
           type="button"
         >
