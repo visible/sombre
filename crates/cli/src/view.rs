@@ -1283,7 +1283,10 @@ pub fn help() {
             "/settings",
             "agent, model, permissions, effort, queue or steer, phone relay, publishing, mcp",
         ),
-        ("/device", "keep the mac awake, even with the lid closed"),
+        (
+            "/device",
+            "keep this computer awake, even with the lid closed",
+        ),
         (
             "/goal <done when>",
             "keep working until it's done. /goal shows progress",

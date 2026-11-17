@@ -682,7 +682,7 @@ mod tests {
     #[test]
     fn summaries_wrap_long_questions_and_keep_the_answer_whole() {
         let rows = summary(
-            "yolo lets the agent change any file and run any command on your mac without asking. turn it on?",
+            "yolo lets the agent change any file and run any command on your computer without asking. turn it on?",
             "no",
             60,
         );

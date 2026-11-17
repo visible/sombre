@@ -363,7 +363,9 @@ impl Hub {
             return missing("the relay is shutting down");
         };
         let Some(room) = rooms.get_mut(id) else {
-            return missing("this chat isn't paired anymore. run /pair on your mac for a new link");
+            return missing(
+                "this chat isn't paired anymore. run /pair on your computer for a new link",
+            );
         };
         let device = request
             .get("device")
@@ -387,7 +389,7 @@ impl Hub {
                     ok("text/plain", fresh)
                 }
                 None => refuse(
-                    "this pairing link was already used. run /pair on your mac for a new one",
+                    "this pairing link was already used. run /pair on your computer for a new one",
                 ),
             },
             ("GET", "events") if device => {
@@ -469,7 +471,9 @@ impl Hub {
                 rooms.remove(id);
                 ok("text/plain", "ok".to_string())
             }
-            _ => refuse("this phone isn't paired anymore. run /pair on your mac for a new link"),
+            _ => {
+                refuse("this phone isn't paired anymore. run /pair on your computer for a new link")
+            }
         };
         drop(rooms);
         self.changed.notify_all();
@@ -667,7 +671,7 @@ pub fn tailnet() -> Option<Node> {
     crate::tailscale::find()
 }
 
-const OFFLINE: &str = "tailscale isn't connected on this mac. turn it on and run /pair again, or pick this wi-fi under phone in /settings";
+const OFFLINE: &str = "tailscale isn't connected on this computer. turn it on and run /pair again, or pick home network in /pair";
 
 fn live() -> Option<Arc<Session>> {
     LIVE.lock().ok()?.clone()
@@ -1077,7 +1081,7 @@ fn reopen() -> Result<bool, String> {
         };
         let node = match reach {
             Reach::Tailnet => Some(tailnet().ok_or(
-                "tailscale isn't connected, so your phone can't reach this mac. turn it on, or run /pair for a new link",
+                "tailscale isn't connected, so your phone can't reach this computer. turn it on, or run /pair for a new link",
             )?),
             Reach::Wifi | Reach::Relay | Reach::Hosted => None,
         };
@@ -1085,8 +1089,8 @@ fn reopen() -> Result<bool, String> {
         let bind = node.as_ref().map_or(ip, Node::bind);
         if saved["ip"].as_str() != Some(ip.to_string().as_str()) {
             return Err(match reach {
-                Reach::Tailnet => "your mac's tailscale address changed, so your phone needs a new link. run /pair",
-                Reach::Wifi | Reach::Relay | Reach::Hosted => "your mac's wi-fi address changed, so your phone needs a new link. run /pair",
+                Reach::Tailnet => "this computer's tailscale address changed, so your phone needs a new link. run /pair",
+                Reach::Wifi | Reach::Relay | Reach::Hosted => "this computer's wi-fi address changed, so your phone needs a new link. run /pair",
             }
             .to_string());
         }

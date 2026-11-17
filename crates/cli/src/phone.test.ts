@@ -111,7 +111,7 @@ describe("steps on the phone", () => {
 });
 
 describe("summary", () => {
-  test("shows costs the way the mac does", () => {
+  test("shows costs the way the computer does", () => {
     expect(summary({ cost: 0.004 })).toBe("<$0.01");
     expect(summary({ cost: 0.0123 })).toBe("$0.01");
     expect(summary({ cost: 1.5 })).toBe("$1.50");

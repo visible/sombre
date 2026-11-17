@@ -36,7 +36,7 @@ impl Mode {
         match self {
             Self::Ask => "ask before edits and commands",
             Self::Auto => "edit files freely, ask before commands",
-            Self::Yolo => "never ask. full access to your mac",
+            Self::Yolo => "never ask. full access to your computer",
         }
     }
 

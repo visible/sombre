@@ -209,7 +209,7 @@ const Connect = ({ presets, onEdit }: { presets: Preset[]; onEdit: Edit }) => {
           </div>
           {preset?.local ? (
             <p className="text-fog text-[12px]">
-              runs on your machine, so it needs no key
+              runs on your computer, so it needs no key
             </p>
           ) : (
             <Field

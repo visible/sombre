@@ -75,7 +75,7 @@ pub fn pick(roots: &Roots, current: Option<String>) -> Option<Target> {
                 "sombre's agent, key in your keychain".to_string()
             }
             Some(source) => format!("sombre's agent, key from {source}"),
-            None if local => "sombre's agent, runs on this mac".to_string(),
+            None if local => "sombre's agent, runs on this computer".to_string(),
             None => "sombre's agent, needs a key".to_string(),
         };
         let label = if name == GATEWAY {
@@ -220,7 +220,7 @@ fn create(config: &mut Config) -> Option<String> {
             crate::menu::select("what are you connecting?"),
             |menu, (id, label, url, local)| {
                 let hint = if *local {
-                    format!("{url}, runs on your machine")
+                    format!("{url}, runs on your computer")
                 } else {
                     (*url).to_string()
                 };

@@ -36,7 +36,7 @@ use crate::provider::Target;
 #[command(
     name = "sombre",
     disable_version_flag = true,
-    about = "every coding agent session on your mac, in one place",
+    about = "every coding agent session on your computer, in one place",
     long_about = "run `sombre` in a folder to start a chat there. run `sombre resume` to pick up an old chat from any agent."
 )]
 struct Cli {

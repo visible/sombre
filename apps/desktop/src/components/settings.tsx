@@ -266,12 +266,12 @@ const General = ({
       />
     </Row>
     <Row
-      about="stops your mac sleeping while sombre is open"
-      title="keep the mac awake"
+      about="stops your computer sleeping while sombre is open"
+      title="keep this computer awake"
     >
       <Switch
         checked={settings.awake}
-        label="keep the mac awake"
+        label="keep this computer awake"
         onChange={(awake) => onChange({ awake })}
       />
     </Row>
@@ -404,7 +404,7 @@ export const Preferences = ({
             <div className="mx-auto flex max-w-[680px] flex-col gap-7 px-8 py-8">
               <General onChange={onChange} settings={settings} />
               <Card
-                about="sombre runs the ones it finds on your machine"
+                about="sombre runs the ones it finds on your computer"
                 id="agents"
                 title="agents"
               >

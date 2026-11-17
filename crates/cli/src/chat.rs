@@ -58,17 +58,17 @@ fn elsewhere(input: &Input) -> Option<&'static str> {
         Input::Effort(None) => Some("send /effort with a level: low, medium, high, xhigh, or max"),
         Input::Permissions(None) => Some("send /permissions ask or /permissions auto"),
         Input::Permissions(Some(mode)) if mode == "yolo" => {
-            Some("yolo needs a yes on your mac, so turn it on there")
+            Some("yolo needs a yes on your computer, so turn it on there")
         }
         Input::Rename(name) if name.is_empty() => Some("send /rename with the new name"),
         Input::Resume(_) | Input::Settings | Input::Device | Input::Mcp | Input::Provider => {
-            Some("that one opens a picker on your mac, so run it there")
+            Some("that one opens a picker on your computer, so run it there")
         }
         Input::Pair(rest) if rest.is_empty() => {
             Some("this phone is already paired. /pair list shows your phones")
         }
         Input::Exit => {
-            Some("/exit only works on your mac, so your phone can't leave sombre closed")
+            Some("/exit only works on your computer, so your phone can't leave sombre closed")
         }
         _ => None,
     }
@@ -759,7 +759,7 @@ fn device(roots: &Roots) {
                     "off"
                 }
                 .to_string(),
-                "keeps the mac from sleeping on its own while sombre is open. tab switches it",
+                "keeps this computer from sleeping on its own while sombre is open. tab switches it",
             ),
             (
                 Part::Lid,
@@ -788,7 +788,7 @@ fn device(roots: &Roots) {
                 Part::Power,
                 "power",
                 power::battery().unwrap_or_else(|| "no battery".to_string()),
-                "how the mac is powered right now",
+                "how this computer is powered right now",
             ),
             (
                 Part::Phone,
@@ -989,7 +989,7 @@ fn settings(engine: &Engine, roots: &Roots) -> Option<Input> {
                 }
                 if config.tailscale && crate::relay::tailnet().is_none() {
                     view::note(
-                        "tailscale isn't connected on this mac right now. /pair works once it is",
+                        "tailscale isn't connected on this computer right now. /pair works once it is",
                     );
                 }
                 if crate::relay::paired() {
@@ -1376,7 +1376,7 @@ fn strive(engine: &mut Engine, roots: Option<&Roots>, effort: Option<String>) {
 
 fn daring() -> bool {
     crate::menu::confirm(
-        "yolo lets the agent change any file and run any command on your mac without asking. turn it on?",
+        "yolo lets the agent change any file and run any command on your computer without asking. turn it on?",
     )
     .initial_value(false)
     .interact()

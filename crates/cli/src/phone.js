@@ -760,7 +760,7 @@ const start = () => {
   const saved = recall("key");
   if (!saved) {
     mood("off", "not paired");
-    empty("not paired", "run /pair on your mac, then scan the code");
+    empty("not paired", "run /pair on your computer, then scan the code");
     return;
   }
   let key = unbase(saved);
@@ -782,7 +782,7 @@ const start = () => {
       rule.textContent = "";
     }
     state.busy = on;
-    mood(on ? "working" : "live", on ? "working" : "live on your mac");
+    mood(on ? "working" : "live", on ? "working" : "live on your computer");
     queue.hidden = !on;
     send.setAttribute("aria-label", on ? "send now" : "send");
     send.replaceChildren(on ? "now" : arrow);
@@ -808,9 +808,9 @@ const start = () => {
   };
   const receipt = (entry) => {
     if (state.away) {
-      return "waiting for your mac";
+      return "waiting for your computer";
     }
-    return entry.queued ? "queued on your mac" : "sent";
+    return entry.queued ? "queued on your computer" : "sent";
   };
   const stamp = (id, text) => {
     const held = pending.find((entry) => entry.id === id);
@@ -913,7 +913,7 @@ const start = () => {
         element(
           "p",
           "note",
-          "these photos didn't reach your mac. update sombre there and restart it"
+          "these photos didn't reach your computer. update sombre there and restart it"
         )
       );
     }
@@ -1147,7 +1147,7 @@ const start = () => {
   };
   const arrive = () => {
     if (feed.childElementCount === 0 && outbox.length === 0) {
-      empty("connected to your mac", "messages in this chat show up here");
+      empty("connected to your computer", "messages in this chat show up here");
     }
     for (const entry of outbox) {
       if (entry.value.kind === "message") {
@@ -1169,7 +1169,7 @@ const start = () => {
   const unpaired = (title) => {
     mood("off", "disconnected");
     form.hidden = true;
-    empty(title, "run /pair on your mac for a new link");
+    empty(title, "run /pair on your computer for a new link");
   };
   const received = (body) => {
     state.tries = 0;
@@ -1205,11 +1205,11 @@ const start = () => {
       state.away = !body.mac;
     }
     if (state.away) {
-      mood("connecting", "waiting for your mac");
+      mood("connecting", "waiting for your computer");
     } else if (state.busy) {
       mood("working", "working");
     } else {
-      mood("live", "live on your mac");
+      mood("live", "live on your computer");
     }
     deliver();
     return true;
