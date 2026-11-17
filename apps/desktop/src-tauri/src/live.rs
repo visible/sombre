@@ -1062,6 +1062,12 @@ impl Runner {
             }
             if self.followed() {
                 self.phone();
+            } else if !self.held.is_empty() {
+                self.held.clear();
+                self.emit(Update::Note {
+                    text: "dropped the messages waiting from a phone that isn't paired anymore"
+                        .to_string(),
+                });
             }
             if !self.busy
                 && let Some((text, images)) = self.held.pop_front()

@@ -810,11 +810,32 @@ impl Session {
         fresh(&mut seen, nonce).then_some(plain)
     }
 
-    fn send(&self, key: &[u8; 32], message: &Value) {
+    fn post(&self, message: &Value) {
         if let Ok(mut outbox) = self.outbox.lock() {
-            outbox.push_back((*key, message.clone()));
+            outbox.push_back((self.key(), message.clone()));
             self.queued.notify_one();
         }
+    }
+
+    fn rekey(&self, again: &[Value]) {
+        let Ok(mut outbox) = self.outbox.lock() else {
+            return;
+        };
+        let old = self.key();
+        let fresh: [u8; 32] = random();
+        outbox.push_back((
+            old,
+            json!({"kind": "rekey", "key": URL_SAFE_NO_PAD.encode(fresh)}),
+        ));
+        if let Ok(mut keys) = self.keys.lock() {
+            *keys = (fresh, Some((old, Instant::now())));
+        }
+        for item in again {
+            let mut item = item.clone();
+            item["again"] = json!(true);
+            outbox.push_back((fresh, item));
+        }
+        self.queued.notify_one();
     }
 
     fn deliver(&self) {
@@ -924,12 +945,12 @@ fn pull(session: &Session) {
                     }
                 }
                 Some(Inbound::Answer { id, yes }) => {
-                    if let Ok(mut answers) = session.answers.lock() {
+                    if let (Some(id), Ok(mut answers)) = (untagged(&id), session.answers.lock()) {
                         answers.push_back((id, yes));
                     }
                 }
                 Some(Inbound::Reply { id, answers }) => {
-                    if let Ok(mut replies) = session.replies.lock() {
+                    if let (Some(id), Ok(mut replies)) = (untagged(&id), session.replies.lock()) {
                         replies.push_back((id, answers));
                     }
                 }
@@ -1101,8 +1122,11 @@ fn start(link: Link, key: [u8; 32], seen: VecDeque<[u8; 12]>, read: usize) -> Ar
             thread::sleep(pause);
         }
     });
-    if let Ok(mut live) = LIVE.lock() {
-        *live = Some(Arc::clone(&session));
+    if let Ok(mut live) = LIVE.lock()
+        && let Some(old) = live.replace(Arc::clone(&session))
+    {
+        old.stop.store(true, Ordering::SeqCst);
+        halt(&old.link);
     }
     session
 }
@@ -1213,9 +1237,12 @@ fn cloud(remote: Remote) -> Link {
     Link::Cloud(remote, wire)
 }
 
+static OPENING: Mutex<()> = Mutex::new(());
+
 pub fn invite(reach: Reach, relay: Option<&str>) -> Result<(String, Reach), String> {
+    let _opening = OPENING.lock();
     if live().is_none() {
-        let _ = reopen();
+        let _ = restore();
     }
     let session = match live() {
         Some(session) => session,
@@ -1253,6 +1280,9 @@ pub fn close() -> bool {
         return false;
     };
     session.stop.store(true, Ordering::SeqCst);
+    if let Ok(mut held) = HELD.lock() {
+        held.clear();
+    }
     if let Ok(mut followed) = FOLLOWED.lock() {
         *followed = None;
     }
@@ -1346,6 +1376,11 @@ fn forwarding(port: u16) -> bool {
 }
 
 fn reopen() -> Result<bool, String> {
+    let _opening = OPENING.lock();
+    restore()
+}
+
+fn restore() -> Result<bool, String> {
     if live().is_some() {
         return Ok(false);
     }
@@ -1469,19 +1504,9 @@ pub fn forget(id: &str, again: &[Value]) -> bool {
     if session.link.call("POST", "forget", "", id).is_none() {
         return false;
     }
-    let old = session.key();
-    let fresh: [u8; 32] = random();
-    session.send(
-        &old,
-        &json!({"kind": "rekey", "key": URL_SAFE_NO_PAD.encode(fresh)}),
-    );
-    if let Ok(mut keys) = session.keys.lock() {
-        *keys = (fresh, Some((old, Instant::now())));
-    }
-    for item in again {
-        let mut item = item.clone();
-        item["again"] = json!(true);
-        session.send(&fresh, &item);
+    session.rekey(again);
+    if let Ok(mut held) = HELD.lock() {
+        held.clear();
     }
     true
 }
@@ -1490,7 +1515,40 @@ pub fn post(message: &Value) {
     let Some(session) = live() else {
         return;
     };
-    session.send(&session.key(), message);
+    let mut message = message.clone();
+    if matches!(message["kind"].as_str(), Some("decided" | "answered"))
+        && let Some(tag) = message["id"].as_str().and_then(settled)
+    {
+        message["id"] = json!(tag);
+    }
+    session.post(&message);
+}
+
+static TAGS: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+
+fn tagged(id: &str) -> String {
+    let tag = format!("{id}.{}", hex(&random::<6>()));
+    if let Ok(mut tags) = TAGS.lock() {
+        tags.retain(|(_, known)| known != id);
+        tags.push((tag.clone(), id.to_string()));
+        if tags.len() > 256 {
+            tags.remove(0);
+        }
+    }
+    tag
+}
+
+fn untagged(tag: &str) -> Option<String> {
+    let tags = TAGS.lock().ok()?;
+    tags.iter()
+        .find(|(known, _)| known == tag)
+        .map(|(_, id)| id.clone())
+}
+
+fn settled(id: &str) -> Option<String> {
+    let mut tags = TAGS.lock().ok()?;
+    let index = tags.iter().position(|(_, known)| known == id)?;
+    Some(tags.remove(index).0)
 }
 
 pub fn message() -> Option<Arrival> {
@@ -1616,11 +1674,11 @@ pub fn shown(item: &sombre_core::Event) -> Vec<Value> {
             change,
             ..
         } => {
-            json!({"kind": "approval", "id": id, "tool": tool, "detail": detail, "change": change})
+            json!({"kind": "approval", "id": tagged(id), "tool": tool, "detail": detail, "change": change})
         }
         Event::Questions { id, questions, .. } => json!({
             "kind": "questions",
-            "id": id,
+            "id": tagged(id),
             "questions": questions
                 .iter()
                 .map(|question| json!({
@@ -1691,6 +1749,57 @@ mod tests {
             seen: Mutex::new(VecDeque::new()),
             stop: AtomicBool::new(false),
         }
+    }
+
+    #[test]
+    fn a_stale_answer_never_approves_a_newer_prompt_with_the_same_id() {
+        let first = tagged("tagged-0");
+        assert_eq!(untagged(&first).as_deref(), Some("tagged-0"));
+        let second = tagged("tagged-0");
+        assert_ne!(first, second);
+        assert_eq!(untagged(&first), None);
+        assert_eq!(untagged("tagged-0"), None);
+        assert_eq!(untagged(&second).as_deref(), Some("tagged-0"));
+        assert_eq!(settled("tagged-0"), Some(second.clone()));
+        assert_eq!(untagged(&second), None);
+    }
+
+    #[test]
+    fn messages_around_a_rekey_are_sealed_with_the_key_phones_hold_then() {
+        let local = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        let link = here_at(local, local, Reach::Wifi).unwrap_or_else(|error| panic!("{error}"));
+        let session = session(link);
+        let old = session.key();
+        session.post(&json!({"kind": "text", "text": "before"}));
+        session.rekey(&[json!({"kind": "text", "text": "history"})]);
+        session.post(&json!({"kind": "text", "text": "after"}));
+        let fresh = session.key();
+        assert_ne!(old, fresh);
+        let outbox: Vec<Outgoing> = session
+            .outbox
+            .lock()
+            .map(|outbox| outbox.iter().cloned().collect())
+            .unwrap_or_default();
+        let sealed: Vec<([u8; 32], String)> = outbox
+            .iter()
+            .map(|(key, message)| {
+                (
+                    *key,
+                    message["kind"].as_str().unwrap_or_default().to_string(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            sealed,
+            [
+                (old, "text".to_string()),
+                (old, "rekey".to_string()),
+                (fresh, "text".to_string()),
+                (fresh, "text".to_string()),
+            ]
+        );
+        assert_eq!(outbox[1].1["key"], json!(URL_SAFE_NO_PAD.encode(fresh)));
+        assert_eq!(outbox[2].1["again"], json!(true));
     }
 
     #[test]
