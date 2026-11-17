@@ -110,18 +110,14 @@ pub fn lines(
     }
     for (place, index) in picked.iter().enumerate().skip(state.offset).take(rows) {
         let label = fit(&labels[*index], room.saturating_sub(4));
-        lines.push(if place == state.selected {
-            format!("  {} {}", ember("●"), bold(&label))
-        } else {
-            format!("  {} {label}", dim("○"))
-        });
-    }
-    if let Some(hint) = picked
-        .get(state.selected)
-        .and_then(|index| hints.get(*index))
-        .filter(|hint| !hint.is_empty())
-    {
-        lines.push(format!("    {}", dim(&fit(hint, room.saturating_sub(4)))));
+        if place != state.selected {
+            lines.push(format!("  {} {label}", dim("○")));
+            continue;
+        }
+        lines.push(format!("  {} {}", ember("●"), bold(&label)));
+        if let Some(hint) = hints.get(*index).filter(|hint| !hint.is_empty()) {
+            lines.push(format!("    {}", dim(&fit(hint, room.saturating_sub(4)))));
+        }
     }
     let more = picked.len().saturating_sub(state.offset + rows);
     let keys = if filter {
@@ -581,14 +577,14 @@ pub fn ticks(
             dim("□")
         };
         let label = fit(label, room.saturating_sub(4));
-        lines.push(if index == selected {
-            format!("  {mark} {}", bold(&label))
-        } else {
-            format!("  {mark} {label}")
-        });
-    }
-    if let Some(hint) = hints.get(selected).filter(|hint| !hint.is_empty()) {
-        lines.push(format!("    {}", dim(&fit(hint, room.saturating_sub(4)))));
+        if index != selected {
+            lines.push(format!("  {mark} {label}"));
+            continue;
+        }
+        lines.push(format!("  {mark} {}", bold(&label)));
+        if let Some(hint) = hints.get(index).filter(|hint| !hint.is_empty()) {
+            lines.push(format!("    {}", dim(&fit(hint, room.saturating_sub(4)))));
+        }
     }
     lines.push(format!("  {}", dim("↑↓  space picks  enter  esc")));
     lines
@@ -695,6 +691,21 @@ mod tests {
 
     fn labels(names: &[&str]) -> Vec<String> {
         names.iter().map(|name| (*name).to_string()).collect()
+    }
+
+    #[test]
+    fn hints_sit_right_under_the_selected_row() {
+        let names = labels(&["anywhere", "home network"]);
+        let hints = labels(&["over tailscale", "only on this wi-fi"]);
+        let state = State::default();
+        let drawn = lines("where?", &names, &hints, &state, false, 8, 60);
+        assert!(drawn[1].contains("anywhere"));
+        assert!(drawn[2].contains("over tailscale"));
+        assert!(drawn[3].contains("home network"));
+        assert!(!drawn.iter().any(|line| line.contains("wi-fi")));
+        let ticked = ticks("pick", &names, &hints, &[false, true], 1, 60);
+        assert!(ticked[2].contains("home network"));
+        assert!(ticked[3].contains("wi-fi"));
     }
 
     #[test]
