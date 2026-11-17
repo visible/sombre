@@ -31,3 +31,7 @@ tempfile = "3"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
+
+[profile.release]
+lto = "thin"
+strip = true
