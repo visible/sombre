@@ -16,6 +16,9 @@ const guarded = (response: Response, url: URL) => {
   headers.set("Cache-Control", "no-store");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "no-referrer");
+  if (url.protocol === "https:") {
+    headers.set("Strict-Transport-Security", "max-age=31536000");
+  }
   headers.set(
     "Content-Security-Policy",
     `default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ${socket}; frame-ancestors 'none'`
