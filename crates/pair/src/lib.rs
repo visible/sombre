@@ -3,7 +3,7 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -638,6 +638,18 @@ pub enum Reach {
     Hosted,
 }
 
+impl Reach {
+    pub fn preferred(config: &sombre_harness::config::Config) -> Self {
+        if config.tailscale {
+            Self::Tailnet
+        } else if config.relay.is_some() {
+            Self::Relay
+        } else {
+            Self::Hosted
+        }
+    }
+}
+
 enum Link {
     Here {
         hub: Arc<Hub>,
@@ -888,8 +900,35 @@ pub fn marked(text: &str, count: usize) -> String {
         .join(" ")
 }
 
+static NAME: OnceLock<&'static str> = OnceLock::new();
+static FOLLOWED: Mutex<Option<String>> = Mutex::new(None);
+static LOADED: AtomicBool = AtomicBool::new(false);
+
+pub fn named(name: &'static str) {
+    let _ = NAME.set(name);
+}
+
 fn place() -> Option<std::path::PathBuf> {
-    sombre_core::Roots::detect().map(|roots| roots.sombre.join("pair.json"))
+    let name = NAME.get().copied().unwrap_or("pair.json");
+    sombre_core::Roots::detect().map(|roots| roots.sombre.join(name))
+}
+
+pub fn follow(chat: &str) {
+    if let Ok(mut followed) = FOLLOWED.lock() {
+        *followed = Some(chat.to_string());
+    }
+}
+
+pub fn followed() -> Option<String> {
+    if !LOADED.swap(true, Ordering::SeqCst)
+        && let Some(chat) = place()
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .and_then(|saved| saved["follow"].as_str().map(str::to_string))
+    {
+        follow(&chat);
+    }
+    FOLLOWED.lock().ok().and_then(|followed| followed.clone())
 }
 
 fn snapshot(session: &Session) -> Value {
@@ -912,6 +951,9 @@ fn snapshot(session: &Session) -> Value {
         "key": URL_SAFE_NO_PAD.encode(session.key()),
         "seen": seen,
     });
+    if let Some(chat) = FOLLOWED.lock().ok().and_then(|followed| followed.clone()) {
+        saved["follow"] = json!(chat);
+    }
     match &session.link {
         Link::Here {
             room,
@@ -1143,6 +1185,9 @@ pub fn close() -> bool {
         return false;
     };
     session.stop.store(true, Ordering::SeqCst);
+    if let Ok(mut followed) = FOLLOWED.lock() {
+        *followed = None;
+    }
     if let Some(path) = place() {
         let _ = std::fs::remove_file(path);
     }
@@ -1310,6 +1355,13 @@ pub fn paired() -> bool {
     live().is_some()
 }
 
+pub fn reach() -> Option<Reach> {
+    if live().is_none() {
+        let _ = reopen();
+    }
+    live().map(|session| session.link.reach())
+}
+
 pub fn devices() -> Vec<Device> {
     live()
         .and_then(|session| session.link.call("GET", "devices", "", ""))
@@ -1378,6 +1430,30 @@ pub fn replied(id: &str) -> Option<Option<Vec<String>>> {
     pick(&mut *live()?.replies.lock().ok()?, id)
 }
 
+pub fn answers() -> Vec<(String, bool)> {
+    live()
+        .and_then(|session| {
+            session
+                .answers
+                .lock()
+                .ok()
+                .map(|mut queue| queue.drain(..).collect())
+        })
+        .unwrap_or_default()
+}
+
+pub fn replies() -> Vec<(String, Option<Vec<String>>)> {
+    live()
+        .and_then(|session| {
+            session
+                .replies
+                .lock()
+                .ok()
+                .map(|mut queue| queue.drain(..).collect())
+        })
+        .unwrap_or_default()
+}
+
 fn served(name: &str, built: &str) -> String {
     std::env::var_os("SOMBRE_PHONE")
         .and_then(|folder| std::fs::read_to_string(Path::new(&folder).join(name)).ok())
@@ -1419,17 +1495,24 @@ pub fn said(text: &str, images: &[std::path::PathBuf]) {
 }
 
 pub fn mirror(item: &sombre_core::Event) {
-    use sombre_core::Event;
     if !paired() {
         return;
     }
+    for message in shown(item) {
+        post(&message);
+    }
+}
+
+pub fn shown(item: &sombre_core::Event) -> Vec<Value> {
+    use sombre_core::Event;
     if let Event::Step { label, detail, .. } = item
         && label == "Read"
         && pictured(detail)
     {
-        post(&json!({"kind": "step", "label": label, "detail": detail}));
-        post(&json!({"kind": "image", "image": picture(Path::new(detail))}));
-        return;
+        return vec![
+            json!({"kind": "step", "label": label, "detail": detail}),
+            json!({"kind": "image", "image": picture(Path::new(detail))}),
+        ];
     }
     let shown = match item {
         Event::Image(path) => json!({"kind": "image", "image": picture(Path::new(path))}),
@@ -1470,9 +1553,9 @@ pub fn mirror(item: &sombre_core::Event) {
         }),
         Event::Failed(text) => json!({"kind": "failed", "text": text}),
         Event::Note(text) => json!({"kind": "note", "text": text}),
-        _ => return,
+        _ => return Vec::new(),
     };
-    post(&shown);
+    vec![shown]
 }
 
 pub fn serve(port: u16) -> io::Result<()> {

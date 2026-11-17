@@ -217,6 +217,9 @@ export type Update =
     }
   | { kind: "questions"; id: string; questions: Question[] }
   | { kind: "granted"; id: string }
+  | { kind: "phone"; text: string }
+  | { kind: "decided"; id: string; yes: boolean }
+  | { kind: "replied"; id: string; answers: string[] | null }
   | { kind: "note"; text: string }
   | { kind: "failed"; text: string }
   | { kind: "changes"; from: string; to: string; files: Changed[] }
@@ -286,6 +289,30 @@ export const steer = (key: string, text: string) =>
 
 export const answer = (key: string, id: string, choice: Choice) =>
   invoke<null>("answer", { choice, id, key });
+
+export interface Paired {
+  link: string;
+  code: string;
+  reach: string;
+  home: boolean;
+}
+
+export interface Phone {
+  id: string;
+  label: string;
+  since: number;
+}
+
+export const pair = (key: string, home?: boolean) =>
+  invoke<Paired>("pair", { home: home ?? null, key });
+
+export const phones = () => invoke<Phone[]>("phones");
+
+export const forget = (id: string) => invoke<boolean>("forget", { id });
+
+export const unpair = () => invoke<boolean>("unpair");
+
+export const followed = () => invoke<string | null>("followed");
 
 export const tell = (key: string, id: string, answers: string[] | null) =>
   invoke<null>("reply", { answers, id, key });

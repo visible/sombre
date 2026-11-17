@@ -1,4 +1,13 @@
-import type { Aim, Choice, Entry, Item, Mode, Picture, Update } from "./api";
+import type {
+  Aim,
+  Choice,
+  Entry,
+  Item,
+  Mode,
+  Picture,
+  Task,
+  Update,
+} from "./api";
 
 export interface Queued {
   text: string;
@@ -118,23 +127,39 @@ export const replied = (
   ),
 });
 
+const stated = (
+  live: Live,
+  update: Update & { kind: "state" },
+  now: number
+): Live => ({
+  ...live,
+  busy: update.busy,
+  cost: update.cost,
+  effort: update.effort,
+  folder: update.folder,
+  goal: update.goal,
+  left: update.left ?? live.left,
+  levels: update.levels,
+  mode: update.mode,
+  model: update.model,
+  session: update.session,
+  since: update.busy ? (live.since ?? now) : null,
+});
+
+const planned = (live: Live, tasks: Task[]): Live => {
+  const index = live.entries.findLastIndex((entry) => entry.kind === "plan");
+  const turn = live.entries.findLastIndex((entry) => entry.kind === "user");
+  const found = live.entries[index];
+  if (found && index > turn) {
+    return swap(live, index, { id: found.id, kind: "plan", tasks }, false);
+  }
+  return push(live, { kind: "plan", tasks });
+};
+
 export const apply = (live: Live, update: Update, now: number): Live => {
   switch (update.kind) {
     case "state": {
-      return {
-        ...live,
-        busy: update.busy,
-        cost: update.cost,
-        effort: update.effort,
-        folder: update.folder,
-        goal: update.goal,
-        left: update.left ?? live.left,
-        levels: update.levels,
-        mode: update.mode,
-        model: update.model,
-        session: update.session,
-        since: update.busy ? (live.since ?? now) : null,
-      };
+      return stated(live, update, now);
     }
     case "delta": {
       return stream(live, update.text, true);
@@ -167,20 +192,7 @@ export const apply = (live: Live, update: Update, now: number): Live => {
       }));
     }
     case "plan": {
-      const index = live.entries.findLastIndex(
-        (entry) => entry.kind === "plan"
-      );
-      const turn = live.entries.findLastIndex((entry) => entry.kind === "user");
-      const found = live.entries[index];
-      if (found && index > turn) {
-        return swap(
-          live,
-          index,
-          { id: found.id, kind: "plan", tasks: update.tasks },
-          false
-        );
-      }
-      return push(live, { kind: "plan", tasks: update.tasks });
+      return planned(live, update.tasks);
     }
     case "ask": {
       return push(live, {
@@ -205,6 +217,15 @@ export const apply = (live: Live, update: Update, now: number): Live => {
     }
     case "granted": {
       return answered(live, update.id, "yes");
+    }
+    case "decided": {
+      return answered(live, update.id, update.yes ? "yes" : "no");
+    }
+    case "replied": {
+      return replied(live, update.id, update.answers);
+    }
+    case "phone": {
+      return push(live, { kind: "user", text: update.text });
     }
     case "changes": {
       return push(live, {

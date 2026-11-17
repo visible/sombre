@@ -655,6 +655,103 @@ fn reply(
     live.tell(&key, Ask::Reply(id, answers))
 }
 
+#[derive(Serialize)]
+struct Paired {
+    link: String,
+    code: String,
+    reach: &'static str,
+    home: bool,
+}
+
+#[derive(Serialize)]
+struct Phone {
+    id: String,
+    label: String,
+    since: u64,
+}
+
+fn code(link: &str) -> Result<String, String> {
+    qrcode::QrCode::new(link.as_bytes())
+        .map(|code| {
+            code.render::<qrcode::render::svg::Color>()
+                .quiet_zone(true)
+                .dark_color(qrcode::render::svg::Color("#0f1011"))
+                .light_color(qrcode::render::svg::Color("#edefef"))
+                .build()
+        })
+        .map_err(|error| format!("couldn't draw the pairing code: {error}"))
+}
+
+#[tauri::command]
+async fn pair(live: State<'_, Live>, key: String, home: Option<bool>) -> Result<Paired, String> {
+    let config = Roots::detect()
+        .and_then(|roots| Config::load(&roots.sombre).ok())
+        .unwrap_or_default();
+    let wanted = if home == Some(true) {
+        sombre_pair::Reach::Wifi
+    } else {
+        sombre_pair::Reach::preferred(&config)
+    };
+    let relay = config.relay.clone();
+    let (link, reach) = blocking(move || {
+        let switched = home
+            .zip(sombre_pair::reach())
+            .is_some_and(|(home, reach)| (reach == sombre_pair::Reach::Wifi) != home);
+        if switched {
+            sombre_pair::close();
+        }
+        sombre_pair::invite(wanted, relay.as_deref())
+    })
+    .await??;
+    sombre_pair::follow(&key);
+    live.tell(&key, Ask::Share(true))?;
+    Ok(Paired {
+        code: code(&link)?,
+        home: reach == sombre_pair::Reach::Wifi,
+        link,
+        reach: match reach {
+            sombre_pair::Reach::Hosted => "via sombre's relay, sealed end to end",
+            sombre_pair::Reach::Relay => "through your own relay",
+            sombre_pair::Reach::Tailnet => "over tailscale, on both devices",
+            sombre_pair::Reach::Wifi => "only on a wi-fi you trust",
+        },
+    })
+}
+
+#[tauri::command]
+async fn phones() -> Result<Vec<Phone>, String> {
+    blocking(|| {
+        sombre_pair::devices()
+            .into_iter()
+            .map(|device| Phone {
+                id: device.id,
+                label: device.label,
+                since: device.since,
+            })
+            .collect()
+    })
+    .await
+}
+
+#[tauri::command]
+async fn forget(live: State<'_, Live>, id: String) -> Result<bool, String> {
+    let forgot = blocking(move || sombre_pair::forget(&id, &[])).await?;
+    if let Some(key) = sombre_pair::followed().filter(|_| forgot) {
+        let _ = live.tell(&key, Ask::Share(false));
+    }
+    Ok(forgot)
+}
+
+#[tauri::command]
+async fn unpair() -> Result<bool, String> {
+    blocking(sombre_pair::close).await
+}
+
+#[tauri::command]
+fn followed() -> Option<String> {
+    sombre_pair::paired().then(sombre_pair::followed).flatten()
+}
+
 #[tauri::command]
 fn stop(live: State<'_, Live>, key: String) -> Result<(), String> {
     live.tell(&key, Ask::Stop)
@@ -706,6 +803,10 @@ fn adopt() {
 
 fn main() {
     adopt();
+    sombre_pair::named("desktop-pair.json");
+    std::thread::spawn(|| {
+        let _ = sombre_pair::resume();
+    });
     if let Some(roots) = Roots::detect() {
         sombre_harness::power::awake(!Config::load(&roots.sombre).unwrap_or_default().sleep);
     }
@@ -729,6 +830,11 @@ fn main() {
             steer,
             answer,
             reply,
+            pair,
+            phones,
+            forget,
+            unpair,
+            followed,
             stop,
             tune,
             rename,

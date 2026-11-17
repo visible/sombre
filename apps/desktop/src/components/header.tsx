@@ -31,6 +31,7 @@ interface Props {
   onReview: (() => void) | null;
   onOpen: (() => void) | null;
   onTerminal: (() => void) | null;
+  onPhone: (() => void) | null;
   chores: Chores;
 }
 
@@ -58,6 +59,7 @@ export const Header = ({
   onReview,
   onOpen,
   onTerminal,
+  onPhone,
   chores,
 }: Props) => {
   const [editing, setEditing] = useState(false);
@@ -245,6 +247,29 @@ export const Header = ({
                 <path d="M9.5 2.5h4v4M13.5 2.5 8 8M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" />
               </svg>
             )}
+          </button>
+        ) : null}
+        {onPhone ? (
+          <button
+            aria-label="pair a phone"
+            className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-7 cursor-pointer items-center rounded-lg px-2"
+            onClick={onPhone}
+            title="pair a phone"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              className="size-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.4"
+              viewBox="0 0 16 16"
+            >
+              <rect height="13" rx="2" width="8" x="4" y="1.5" />
+              <path d="M7 12h2" />
+            </svg>
           </button>
         ) : null}
         {onTerminal ? (

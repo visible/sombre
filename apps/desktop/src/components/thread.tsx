@@ -62,6 +62,7 @@ import { Find } from "./find";
 import { Header } from "./header";
 import { Home } from "./home";
 import { Notice } from "./notice";
+import { Phone } from "./phone";
 import { Questions } from "./questions";
 import { Review } from "./review";
 import { Start } from "./start";
@@ -585,6 +586,7 @@ const Open = ({
   const { close, shown, show, toggle } = useReview(target.folder, latest);
   const { finding, hide } = useFind(groups.length > 0);
   const { docked, stow, swap } = useDrawer(target.folder);
+  const [phoning, setPhoning] = useState(false);
   const missing = lack(installed, agent);
 
   useLayoutEffect(() => {
@@ -749,6 +751,7 @@ const Open = ({
           live={live}
           onOpen={null}
           onReview={null}
+          onPhone={null}
           onTerminal={null}
           onSidebar={onSidebar}
           reviewing={false}
@@ -785,6 +788,7 @@ const Open = ({
                   launch(target.folder?.path ?? "", settings?.editor ?? null)
               : null
           }
+          onPhone={() => setPhoning(true)}
           onReview={toggle}
           onTerminal={swap}
           onSidebar={onSidebar}
@@ -807,6 +811,7 @@ const Open = ({
           top={finding ? <Find onClose={hide} root={scroller} /> : null}
         />
         {composer}
+        <Phone chatKey={key} onClose={() => setPhoning(false)} open={phoning} />
         {docked ? (
           <Suspense fallback={null}>
             <Drawer

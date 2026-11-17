@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,6 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sombre_core::event::Question;
 use sombre_core::{Agent, Event, Roots};
 use sombre_engine::goal::{self, Goal, Outcome, Status};
@@ -98,6 +99,17 @@ pub enum Update {
     },
     Granted {
         id: String,
+    },
+    Phone {
+        text: String,
+    },
+    Decided {
+        id: String,
+        yes: bool,
+    },
+    Replied {
+        id: String,
+        answers: Option<Vec<String>>,
     },
     Note {
         text: String,
@@ -327,10 +339,13 @@ pub enum Ask {
     Reply(String, Option<Vec<String>>),
     Tune(Tuning, Sender<Result<String, String>>),
     Stop,
+    Share(bool),
     Close,
 }
 
 struct Runner {
+    key: String,
+    held: VecDeque<(String, Vec<PathBuf>)>,
     engine: Engine,
     out: Channel<Update>,
     gate: Gate,
@@ -435,6 +450,9 @@ impl Runner {
                 self.state();
             }
             Ask::Send(text, images) if !self.busy => {
+                if self.followed() {
+                    sombre_pair::said(&text, &images);
+                }
                 self.engine.images = images;
                 self.send(&text);
             }
@@ -477,9 +495,74 @@ impl Runner {
                 self.ended();
             }
             Ask::Stop => {}
+            Ask::Share(fresh) => self.share(fresh),
             Ask::Close => return false,
         }
         true
+    }
+
+    fn followed(&self) -> bool {
+        sombre_pair::paired() && sombre_pair::followed().as_deref() == Some(self.key.as_str())
+    }
+
+    fn share(&self, fresh: bool) {
+        let mut items = vec![json!({
+            "agent": self.engine.name(),
+            "folder": self.engine.cwd.display().to_string(),
+            "fresh": fresh,
+            "kind": "hello",
+            "model": self.engine.label,
+            "name": self.engine.cwd.file_name().map(|name| name.to_string_lossy().into_owned()),
+        })];
+        let history = Roots::detect()
+            .zip(self.engine.session.as_deref())
+            .and_then(|(roots, session)| {
+                let sessions = sombre_core::scan(&roots);
+                match sombre_core::find(&sessions, session) {
+                    sombre_core::Lookup::Found(found) => Some(sombre_core::transcript(found)),
+                    _ => None,
+                }
+            })
+            .unwrap_or_default();
+        items.extend(replayed(history));
+        for item in items {
+            sombre_pair::post(&item);
+        }
+    }
+
+    fn phone(&mut self) {
+        while let Some(arrival) = sombre_pair::message() {
+            self.emit(Update::Phone {
+                text: arrival.text.clone(),
+            });
+            if !self.busy {
+                sombre_pair::said(&arrival.text, &arrival.images);
+                self.engine.images = arrival.images;
+                self.send(&arrival.text);
+            } else if arrival.now
+                && self
+                    .engine
+                    .steer(&arrival.text, &arrival.images)
+                    .unwrap_or(false)
+            {
+                sombre_pair::said(&arrival.text, &arrival.images);
+                self.gate.steered();
+            } else {
+                self.held.push_back((arrival.text, arrival.images));
+            }
+        }
+        for (id, yes) in sombre_pair::answers() {
+            if self.waiting.contains_key(&id) {
+                self.answer(&id, if yes { Answer::Yes } else { Answer::No });
+                self.emit(Update::Decided { id, yes });
+            }
+        }
+        for (id, answers) in sombre_pair::replies() {
+            if self.waiting.contains_key(&id) {
+                self.reply(&id, answers.clone());
+                self.emit(Update::Replied { id, answers });
+            }
+        }
     }
 
     fn compact(&mut self) {
@@ -746,6 +829,9 @@ impl Runner {
         let Some(item) = self.waiting.remove(id) else {
             return;
         };
+        if self.followed() {
+            sombre_pair::post(&json!({"id": id, "kind": "decided", "yes": choice != Answer::No}));
+        }
         if choice == Answer::No {
             self.gate.refuse();
         }
@@ -761,6 +847,9 @@ impl Runner {
         let Some(item) = self.waiting.remove(id) else {
             return;
         };
+        if self.followed() {
+            sombre_pair::post(&json!({"answers": answers, "id": id, "kind": "answered"}));
+        }
         if answers.is_none() && self.engine.agent == Agent::Claude {
             self.gate.refuse();
         }
@@ -874,7 +963,14 @@ impl Runner {
     fn apply(&mut self, event: Event) {
         let approval = matches!(event, Event::Approval { .. } | Event::Questions { .. })
             .then(|| event.clone());
-        match self.gate.pass(event) {
+        let raw = self.followed().then(|| event.clone());
+        let pass = self.gate.pass(event);
+        if let Some(raw) = raw
+            && matches!(pass, Pass::Show(_) | Pass::Ask(_) | Pass::Failed(_))
+        {
+            sombre_pair::mirror(&raw);
+        }
+        match pass {
             Pass::Skip => {}
             Pass::Show(update) => self.emit(update),
             Pass::Session(id) => {
@@ -907,6 +1003,14 @@ impl Runner {
                 self.engine.left = left.or(self.engine.left);
                 let spent = self.engine.charge(cost);
                 let elapsed = u64::try_from(self.started.elapsed().as_millis()).ok();
+                if self.followed() {
+                    sombre_pair::post(&json!({
+                        "cost": spent,
+                        "kind": "done",
+                        "left": left,
+                        "millis": millis.or(elapsed),
+                    }));
+                }
                 self.emit(Update::Done {
                     cost: spent,
                     left,
@@ -951,6 +1055,18 @@ impl Runner {
                 && !self.handle(ask)
             {
                 break;
+            }
+            if self.followed() {
+                self.phone();
+            }
+            if !self.busy
+                && let Some((text, images)) = self.held.pop_front()
+            {
+                if self.followed() {
+                    sombre_pair::said(&text, &images);
+                }
+                self.engine.images = images;
+                self.send(&text);
             }
             if !self.busy && self.engine.woke() {
                 self.wake();
@@ -997,6 +1113,8 @@ impl Live {
         let halt = Arc::new(AtomicBool::new(false));
         let cwd = engine.cwd.clone();
         let runner = Runner {
+            key: key.to_string(),
+            held: VecDeque::new(),
             busy: false,
             clearing: false,
             errors: Vec::new(),
@@ -1080,12 +1198,67 @@ impl Live {
     }
 }
 
+fn replayed(history: Vec<Event>) -> Vec<serde_json::Value> {
+    history
+        .into_iter()
+        .flat_map(|event| match event.scrubbed() {
+            Event::Prompt(text) => vec![json!({"kind": "user", "text": text})],
+            Event::Done { millis, cost, left } => {
+                vec![json!({"cost": cost, "kind": "done", "left": left, "millis": millis})]
+            }
+            Event::Approval { .. } | Event::Questions { .. } | Event::Delta(_) => Vec::new(),
+            shown => sombre_pair::shown(&shown),
+        })
+        .map(|mut item| {
+            item["again"] = json!(true);
+            item
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn text(value: &str) -> Event {
         Event::Text(value.to_string())
+    }
+
+    #[test]
+    fn a_replayed_chat_shows_prompts_and_replies_but_never_old_decisions() {
+        let replay = replayed(vec![
+            Event::Prompt("make a note".to_string()),
+            Event::Approval {
+                id: "1".to_string(),
+                tool: "Write".to_string(),
+                detail: "note.txt".to_string(),
+                reason: String::new(),
+                change: Vec::new(),
+                input: serde_json::Value::Null,
+                always: None,
+                rules: serde_json::Value::Null,
+            },
+            Event::Questions {
+                id: "2".to_string(),
+                input: serde_json::Value::Null,
+                questions: Vec::new(),
+            },
+            Event::Delta("partial".to_string()),
+            text("done \u{1b}[31mred"),
+            Event::Done {
+                millis: Some(900),
+                cost: Some(0.02),
+                left: None,
+            },
+        ]);
+        let kinds: Vec<&str> = replay
+            .iter()
+            .filter_map(|item| item["kind"].as_str())
+            .collect();
+        assert_eq!(kinds, ["user", "text", "done"]);
+        assert!(replay.iter().all(|item| item["again"] == true));
+        assert_eq!(replay[0]["text"], "make a note");
+        assert!(!replay[1]["text"].as_str().unwrap_or("").contains('\u{1b}'));
     }
 
     #[test]

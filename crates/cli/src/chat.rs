@@ -1067,13 +1067,7 @@ fn settings(engine: &Engine, roots: &Roots) -> Option<Input> {
 }
 
 fn reached(config: &Config) -> Reach {
-    if config.tailscale {
-        Reach::Tailnet
-    } else if config.relay.is_some() {
-        Reach::Relay
-    } else {
-        Reach::Hosted
-    }
+    Reach::preferred(config)
 }
 
 fn way(config: &Config) -> Option<Reach> {

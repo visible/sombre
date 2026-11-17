@@ -1175,6 +1175,12 @@ const start = () => {
     attention();
   };
   const hello = (message) => {
+    if (message.fresh) {
+      feed.replaceChildren();
+      waiting.clear();
+      state.plan = null;
+      state.joined = false;
+    }
     state.agent = message.agent ?? "";
     state.model = message.model ?? "";
     name.textContent = message.name || "sombre";
