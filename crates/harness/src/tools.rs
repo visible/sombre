@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -571,19 +571,10 @@ fn bash(
         .filter(|command| !command.trim().is_empty())
         .ok_or_else(|| "command is missing".to_string())?;
     let seconds = input["timeout"].as_u64().unwrap_or(120).clamp(1, 600);
-    let sandboxed = sandboxed && cfg!(target_os = "macos");
     let inner = process::shell(command);
-    let mut launch = if sandboxed {
-        let mut launch = Command::new("/usr/bin/sandbox-exec");
-        launch
-            .arg("-p")
-            .arg(sandbox::profile(cwd))
-            .arg(inner.get_program())
-            .args(inner.get_args());
-        launch
-    } else {
-        inner
-    };
+    let wrapped = sandboxed.then(|| sandbox::wrap(cwd, &inner)).flatten();
+    let sandboxed = wrapped.is_some();
+    let mut launch = wrapped.unwrap_or(inner);
     let mut child = process::group(&mut launch)
         .current_dir(cwd)
         .stdin(Stdio::null())
