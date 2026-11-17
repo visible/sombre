@@ -584,6 +584,9 @@ const field = (asked) => {
   return { set, value };
 };
 
+const matches = (card, message) =>
+  !message.id || card.dataset.ask === message.id;
+
 const outcome = (yes) => {
   if (yes === null) {
     return element("p", "said", "answered");
@@ -1080,6 +1083,7 @@ const start = () => {
     settle();
     const card = element("section", "ask");
     card.dataset.kind = "questions";
+    card.dataset.ask = message.id ?? "";
     card.setAttribute("aria-live", "assertive");
     card.append(element("h2", "", `${state.agent || "your agent"} asks`));
     const fields = message.questions.map(field);
@@ -1099,7 +1103,10 @@ const start = () => {
     const reply = async (answers) => {
       answered(card, answers);
       attention();
-      outbox.push({ id: ticket(), value: { answers, kind: "reply" } });
+      outbox.push({
+        id: ticket(),
+        value: { answers, id: message.id, kind: "reply" },
+      });
       store();
       await deliver();
     };
@@ -1116,6 +1123,7 @@ const start = () => {
     settle();
     const command = message.tool === "Bash";
     const card = element("section", "ask");
+    card.dataset.ask = message.id ?? "";
     card.setAttribute("aria-live", "assertive");
     card.append(
       element("h2", "", command ? "run this command?" : "make this edit?"),
@@ -1137,7 +1145,10 @@ const start = () => {
     const choose = (yes) => async () => {
       close(card, yes);
       attention();
-      outbox.push({ id: ticket(), value: { kind: "answer", yes } });
+      outbox.push({
+        id: ticket(),
+        value: { id: message.id, kind: "answer", yes },
+      });
       store();
       await deliver();
     };
@@ -1190,15 +1201,34 @@ const start = () => {
       add(line);
     }
   };
+  const forget = (kind, id) => {
+    for (let at = outbox.length - 1; at >= (sending ? 1 : 0); at -= 1) {
+      const { value } = outbox[at];
+      if (value.kind === kind && value.id === id) {
+        outbox.splice(at, 1);
+      }
+    }
+    store();
+  };
   const settled = (message) => {
+    forget("reply", message.id);
     for (const card of waiting) {
-      if (card.dataset.kind === "questions") {
+      if (card.dataset.kind === "questions" && matches(card, message)) {
         answered(card, message.answers);
       }
     }
     attention();
   };
-  const handlers = { answered: settled, questions };
+  const decided = (message) => {
+    forget("answer", message.id);
+    for (const card of waiting) {
+      if (card.dataset.kind !== "questions" && matches(card, message)) {
+        close(card, message.yes);
+      }
+    }
+    attention();
+  };
+  const handlers = { answered: settled, decided, questions };
   const show = (message) => {
     if (Object.hasOwn(handlers, message.kind)) {
       handlers[message.kind](message);
@@ -1241,10 +1271,6 @@ const start = () => {
       }
       case "approval": {
         ask(message);
-        break;
-      }
-      case "decided": {
-        decide(message.yes);
         break;
       }
       case "done": {

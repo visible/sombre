@@ -11,6 +11,7 @@ interface Message {
   kind: string;
   text?: string;
   now?: boolean;
+  id?: string;
   yes?: boolean;
   answers?: string[] | null;
   images?: Image[];
@@ -53,6 +54,7 @@ const answer = (message: Message) => {
   });
   if (message.text?.includes("ask")) {
     push({
+      id: "q1",
       kind: "questions",
       questions: [
         {
@@ -77,7 +79,7 @@ const answer = (message: Message) => {
     });
     if (message.text.includes("mac")) {
       setTimeout(
-        () => push({ answers: ["Ink", "Home"], kind: "answered" }),
+        () => push({ answers: ["Ink", "Home"], id: "q1", kind: "answered" }),
         2500
       );
     }
@@ -87,11 +89,12 @@ const answer = (message: Message) => {
     push({
       change: ["-rm -rf build", "+rm -rf target/debug"],
       detail: "rm -rf target/debug",
+      id: "a1",
       kind: "approval",
       tool: "Bash",
     });
     if (message.text.includes("mac")) {
-      setTimeout(() => push({ kind: "decided", yes: true }), 2500);
+      setTimeout(() => push({ id: "a1", kind: "decided", yes: true }), 2500);
     }
     return;
   }
@@ -173,7 +176,11 @@ const server = Bun.serve({
       if (message.kind === "message") {
         answer(message);
       } else if (message.kind === "reply") {
-        push({ answers: message.answers ?? null, kind: "answered" });
+        push({
+          answers: message.answers ?? null,
+          id: message.id,
+          kind: "answered",
+        });
         push({
           kind: "text",
           text: message.answers
@@ -182,7 +189,7 @@ const server = Bun.serve({
         });
         push({ cost: 0.01, kind: "done", left: 72 });
       } else if (message.kind === "answer") {
-        push({ kind: "decided", yes: message.yes });
+        push({ id: message.id, kind: "decided", yes: message.yes });
         push({ cost: 0.01, kind: "done", left: 72 });
       }
       return new Response("ok");

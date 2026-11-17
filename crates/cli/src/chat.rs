@@ -1911,7 +1911,7 @@ fn pump(
                 Event::Goal { status, reason } => {
                     outcome.goal = Some((status, reason));
                 }
-                Event::Approval { .. } => {
+                Event::Approval { ref id, .. } => {
                     if long(started) {
                         view::notify(&format!("{} needs your approval", engine.name()));
                     }
@@ -1929,6 +1929,7 @@ fn pump(
                         })
                     };
                     crate::relay::post(&serde_json::json!({
+                        "id": id,
                         "kind": "decided",
                         "yes": choice != Choice::No,
                     }));
@@ -1942,7 +1943,7 @@ fn pump(
                         return false;
                     }
                 }
-                Event::Questions { .. } => {
+                Event::Questions { ref id, .. } => {
                     if long(started) {
                         view::notify(&format!("{} has a question for you", engine.name()));
                     }
@@ -1950,6 +1951,7 @@ fn pump(
                     let answers = crate::question::answer(engine.name(), &item);
                     crate::relay::post(&serde_json::json!({
                         "answers": answers,
+                        "id": id,
                         "kind": "answered",
                     }));
                     dock.relabel(footer(engine));

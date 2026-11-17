@@ -227,12 +227,12 @@ fn paint(lines: &[String]) -> usize {
     lines.len()
 }
 
-fn ask(agent: &str, question: &Question, place: (usize, usize)) -> Asked {
+fn ask(agent: &str, id: &str, question: &Question, place: (usize, usize)) -> Asked {
     let mut card = Card::new(question);
     let room = || width().saturating_sub(4).max(20);
     let mut shown = paint(&lines(agent, question, &card, place, room()));
     let asked = loop {
-        if let Some(reply) = crate::relay::replied() {
+        if let Some(reply) = crate::relay::replied(id) {
             break Asked::Phone(reply);
         }
         if sombre_harness::process::hung() {
@@ -264,7 +264,7 @@ fn ask(agent: &str, question: &Question, place: (usize, usize)) -> Asked {
 }
 
 pub fn answer(agent: &str, item: &Item) -> Option<Vec<String>> {
-    let Item::Questions { questions, .. } = item else {
+    let Item::Questions { id, questions, .. } = item else {
         return None;
     };
     clear();
@@ -274,11 +274,10 @@ pub fn answer(agent: &str, item: &Item) -> Option<Vec<String>> {
     while event::poll(Duration::ZERO).unwrap_or(false) {
         let _ = event::read();
     }
-    while crate::relay::replied().is_some() {}
     let mut answers = Vec::new();
     let mut outcome = None;
     for (index, question) in questions.iter().enumerate() {
-        match ask(agent, question, (index, questions.len())) {
+        match ask(agent, id, question, (index, questions.len())) {
             Asked::Answer(text) => answers.push(text),
             Asked::Skip => {
                 outcome = Some(None);

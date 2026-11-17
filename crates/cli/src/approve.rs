@@ -124,6 +124,7 @@ pub fn ask(
     cycle: &mut dyn FnMut() -> Mode,
 ) -> Choice {
     let Item::Approval {
+        id,
         tool,
         detail,
         reason,
@@ -181,7 +182,7 @@ pub fn ask(
                 println!("  {line}");
             }
         }
-        if let Some(choice) = select(&options, &labels, header.len(), mode) {
+        if let Some(choice) = select(id, &options, &labels, header.len(), mode) {
             break choice;
         }
         mode = cycle();
@@ -200,19 +201,24 @@ pub fn ask(
     choice
 }
 
-fn select(options: &[Choice], labels: &[String], header: usize, mode: Mode) -> Option<Choice> {
+fn select(
+    id: &str,
+    options: &[Choice],
+    labels: &[String],
+    header: usize,
+    mode: Mode,
+) -> Option<Choice> {
     if terminal::enable_raw_mode().is_err() {
         return Some(Choice::No);
     }
     while event::poll(Duration::ZERO).unwrap_or(false) {
         let _ = event::read();
     }
-    while crate::relay::answer().is_some() {}
     let block = labels.len() + 2;
     let mut selected = 0;
     draw(options, labels, selected, mode);
     let choice = loop {
-        if let Some(yes) = crate::relay::answer() {
+        if let Some(yes) = crate::relay::answer(id) {
             break Some(if yes { Choice::Yes } else { Choice::No });
         }
         if sombre_harness::process::hung() {

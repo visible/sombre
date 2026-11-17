@@ -36,8 +36,15 @@ pub enum Inbound {
         now: bool,
         images: Vec<Vec<u8>>,
     },
-    Answer(bool),
-    Reply(Option<Vec<String>>),
+    Answer {
+        id: String,
+        yes: bool,
+    },
+    Reply {
+        id: String,
+        answers: Option<Vec<String>>,
+    },
+    Outdated,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -136,9 +143,16 @@ pub fn inbound(plain: &[u8]) -> Option<Inbound> {
                 text: text.to_string(),
             })
         }
-        "answer" => message["yes"].as_bool().map(Inbound::Answer),
-        "reply" => Some(Inbound::Reply(message["answers"].as_array().map(
-            |answers| {
+        "answer" | "reply" if message["id"].as_str().is_none_or(str::is_empty) => {
+            Some(Inbound::Outdated)
+        }
+        "answer" => message["yes"].as_bool().map(|yes| Inbound::Answer {
+            id: message["id"].as_str().unwrap_or_default().to_string(),
+            yes,
+        }),
+        "reply" => Some(Inbound::Reply {
+            id: message["id"].as_str().unwrap_or_default().to_string(),
+            answers: message["answers"].as_array().map(|answers| {
                 answers
                     .iter()
                     .take(SEEN)
@@ -148,8 +162,8 @@ pub fn inbound(plain: &[u8]) -> Option<Inbound> {
                             .to_string()
                     })
                     .collect()
-            },
-        ))),
+            }),
+        }),
         _ => None,
     }
 }
@@ -637,8 +651,8 @@ struct Session {
     saved: Mutex<String>,
     link: Link,
     messages: Mutex<VecDeque<Arrival>>,
-    answers: Mutex<VecDeque<bool>>,
-    replies: Mutex<VecDeque<Option<Vec<String>>>>,
+    answers: Mutex<VecDeque<(String, bool)>>,
+    replies: Mutex<VecDeque<(String, Option<Vec<String>>)>>,
     stop: AtomicBool,
 }
 
@@ -723,16 +737,20 @@ fn pull(session: &Session) {
                         messages.push_back(Arrival { images, now, text });
                     }
                 }
-                Some(Inbound::Answer(yes)) => {
+                Some(Inbound::Answer { id, yes }) => {
                     if let Ok(mut answers) = session.answers.lock() {
-                        answers.push_back(yes);
+                        answers.push_back((id, yes));
                     }
                 }
-                Some(Inbound::Reply(answers)) => {
+                Some(Inbound::Reply { id, answers }) => {
                     if let Ok(mut replies) = session.replies.lock() {
-                        replies.push_back(answers);
+                        replies.push_back((id, answers));
                     }
                 }
+                Some(Inbound::Outdated) => post(&json!({
+                    "kind": "note",
+                    "text": "this page is out of date, so that answer was ignored. reload it and answer again",
+                })),
                 None => {}
             }
         }
@@ -1202,12 +1220,21 @@ pub fn message() -> Option<Arrival> {
     live()?.messages.lock().ok()?.pop_front()
 }
 
-pub fn answer() -> Option<bool> {
-    live()?.answers.lock().ok()?.pop_front()
+fn pick<T: Clone>(queue: &mut VecDeque<(String, T)>, id: &str) -> Option<T> {
+    let found = queue
+        .iter()
+        .find(|(asked, _)| asked == id)
+        .map(|(_, value)| value.clone());
+    queue.clear();
+    found
 }
 
-pub fn replied() -> Option<Option<Vec<String>>> {
-    live()?.replies.lock().ok()?.pop_front()
+pub fn answer(id: &str) -> Option<bool> {
+    pick(&mut *live()?.answers.lock().ok()?, id)
+}
+
+pub fn replied(id: &str) -> Option<Option<Vec<String>>> {
+    pick(&mut *live()?.replies.lock().ok()?, id)
 }
 
 fn served(name: &str, built: &str) -> String {
@@ -1273,13 +1300,17 @@ pub fn mirror(item: &sombre_core::Event) {
         } => json!({"kind": "output", "text": text}),
         Event::Plan { steps, .. } => json!({"kind": "plan", "steps": steps}),
         Event::Approval {
+            id,
             tool,
             detail,
             change,
             ..
-        } => json!({"kind": "approval", "tool": tool, "detail": detail, "change": change}),
-        Event::Questions { questions, .. } => json!({
+        } => {
+            json!({"kind": "approval", "id": id, "tool": tool, "detail": detail, "change": change})
+        }
+        Event::Questions { id, questions, .. } => json!({
             "kind": "questions",
+            "id": id,
             "questions": questions
                 .iter()
                 .map(|question| json!({
@@ -1366,11 +1397,15 @@ mod tests {
     #[test]
     fn seals_so_only_the_key_opens_it() {
         let key: [u8; 32] = random();
-        let sealed = seal(&key, b"{\"kind\":\"answer\",\"yes\":true}").unwrap_or_default();
+        let sealed =
+            seal(&key, b"{\"kind\":\"answer\",\"id\":\"r1\",\"yes\":true}").unwrap_or_default();
         assert!(!sealed.contains("answer"));
         assert_eq!(
             unseal(&key, &sealed).as_deref().and_then(inbound),
-            Some(Inbound::Answer(true))
+            Some(Inbound::Answer {
+                id: "r1".to_string(),
+                yes: true
+            })
         );
         let other: [u8; 32] = random();
         assert!(unseal(&other, &sealed).is_none());
@@ -1402,16 +1437,37 @@ mod tests {
         );
         assert_eq!(inbound(br#"{"kind":"permissions","mode":"yolo"}"#), None);
         assert_eq!(
-            inbound(br#"{"kind":"reply","answers":[" Ember ","Home, \u001b[2JDocs"]}"#),
-            Some(Inbound::Reply(Some(vec![
-                "Ember".to_string(),
-                "Home, Docs".to_string()
-            ])))
+            inbound(br#"{"kind":"reply","id":"q1","answers":[" Ember ","Home, \u001b[2JDocs"]}"#),
+            Some(Inbound::Reply {
+                answers: Some(vec!["Ember".to_string(), "Home, Docs".to_string()]),
+                id: "q1".to_string()
+            })
         );
         assert_eq!(
-            inbound(br#"{"kind":"reply","answers":null}"#),
-            Some(Inbound::Reply(None))
+            inbound(br#"{"kind":"reply","id":"q1","answers":null}"#),
+            Some(Inbound::Reply {
+                answers: None,
+                id: "q1".to_string()
+            })
         );
+        assert_eq!(
+            inbound(br#"{"kind":"answer","yes":true}"#),
+            Some(Inbound::Outdated)
+        );
+        assert_eq!(
+            inbound(br#"{"kind":"reply","answers":["Ink"]}"#),
+            Some(Inbound::Outdated)
+        );
+    }
+
+    #[test]
+    fn an_answer_only_counts_for_the_prompt_it_was_sent_for() {
+        let mut queue = VecDeque::from([("old".to_string(), true), ("now".to_string(), false)]);
+        assert_eq!(pick(&mut queue, "now"), Some(false));
+        assert!(queue.is_empty());
+        let mut late = VecDeque::from([("old".to_string(), true)]);
+        assert_eq!(pick(&mut late, "now"), None);
+        assert!(late.is_empty());
     }
 
     #[test]
