@@ -1066,7 +1066,11 @@ fn way(config: &Config) -> Option<Reach> {
                 Reach::Hosted | Reach::Wifi => "via sombre's relay, sealed end to end",
             },
         )
-        .item(Reach::Wifi, "home network", "only on this wi-fi")
+        .item(
+            Reach::Wifi,
+            "home network",
+            "only on a wi-fi you trust, since the page goes over plain http",
+        )
         .initial_value(anywhere)
         .interact()
         .ok()

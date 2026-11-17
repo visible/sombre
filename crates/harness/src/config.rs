@@ -134,14 +134,24 @@ pub fn file(root: &Path) -> PathBuf {
 }
 
 #[cfg(unix)]
-pub fn private(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+pub fn secret(path: &Path, text: &str) -> io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let temporary = path.with_extension("new");
+    let _ = fs::remove_file(&temporary);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&temporary)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()?;
+    fs::rename(&temporary, path)
 }
 
 #[cfg(not(unix))]
-pub fn private(_: &Path) -> io::Result<()> {
-    Ok(())
+pub fn secret(path: &Path, text: &str) -> io::Result<()> {
+    fs::write(path, text)
 }
 
 pub const LEVELS: [&str; 6] = ["minimal", "low", "medium", "high", "xhigh", "max"];
@@ -234,8 +244,7 @@ impl Config {
         fs::create_dir_all(root)?;
         let path = file(root);
         let text = toml::to_string(self).map_err(io::Error::other)?;
-        fs::write(&path, text)?;
-        private(&path)
+        secret(&path, &text)
     }
 
     pub fn model(&self) -> String {

@@ -1117,7 +1117,7 @@ const start = () => {
       attention();
       outbox.push({
         id: ticket(),
-        value: { answers, id: message.id, kind: "reply" },
+        value: { answers, at: Date.now(), id: message.id, kind: "reply" },
       });
       store();
       await deliver();
@@ -1159,7 +1159,7 @@ const start = () => {
       attention();
       outbox.push({
         id: ticket(),
-        value: { id: message.id, kind: "answer", yes },
+        value: { at: Date.now(), id: message.id, kind: "answer", yes },
       });
       store();
       await deliver();
@@ -1331,6 +1331,10 @@ const start = () => {
   let poll = null;
   let timer = 0;
   const unpaired = (title) => {
+    for (const stored of ["key", "keys", "device", "token", "outbox"]) {
+      discard(stored);
+    }
+    outbox.length = 0;
     mood("off", "disconnected");
     form.hidden = true;
     empty(title, "run /pair on your computer for a new link");
@@ -1558,6 +1562,7 @@ const start = () => {
       id,
       queued: state.busy && !now,
       value: {
+        at: Date.now(),
         images: images.map((image) => ({ data: image.data, name: image.name })),
         kind: "message",
         now,

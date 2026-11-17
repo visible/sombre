@@ -2,10 +2,10 @@ use std::collections::{HashMap, VecDeque};
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -30,8 +30,16 @@ const COMPUTER: &[u8] = b"sombre computer";
 const PHONE: &[u8] = b"sombre phone";
 const REMEMBERED: usize = 1024;
 const BUCKET: usize = 64;
+const HEAD: u64 = 16 * 1024;
+const HEADERS: usize = 64;
+const CONNECTIONS: usize = 64;
+const BUDGET: usize = 32 * 1024 * 1024;
+const TICKET: Duration = Duration::from_secs(10 * 60);
+const GRACE: Duration = Duration::from_secs(60);
+const STALE: u64 = 7 * 24 * 60 * 60 * 1000;
 
 type Rooms = HashMap<String, Room>;
+type Keys = ([u8; 32], Option<([u8; 32], Instant)>);
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Inbound {
@@ -65,11 +73,11 @@ pub struct Device {
     pub since: u64,
 }
 
-#[derive(Default)]
 struct Room {
     epoch: String,
     secret: String,
-    tokens: Vec<String>,
+    touched: Instant,
+    tokens: Vec<(String, Instant)>,
     devices: Vec<Device>,
     out: VecDeque<String>,
     outbase: usize,
@@ -82,14 +90,35 @@ pub struct Hub {
     rooms: Mutex<Rooms>,
     changed: Condvar,
     stop: AtomicBool,
+    active: AtomicUsize,
     open: bool,
     password: Option<String>,
 }
 
 fn random<const N: usize>() -> [u8; N] {
     let mut bytes = [0; N];
-    let _ = SystemRandom::new().fill(&mut bytes);
+    assert!(
+        SystemRandom::new().fill(&mut bytes).is_ok(),
+        "this computer's random number generator failed, so sombre can't make a safe key"
+    );
     bytes
+}
+
+impl Room {
+    fn new(secret: String, devices: Vec<Device>) -> Self {
+        Self {
+            devices,
+            epoch: hex(&random::<6>()),
+            inbase: 0,
+            inbox: VecDeque::new(),
+            out: VecDeque::new(),
+            outbase: 0,
+            secret,
+            seen: VecDeque::new(),
+            tokens: Vec::new(),
+            touched: Instant::now(),
+        }
+    }
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -160,8 +189,22 @@ fn remembered(saved: &Value) -> VecDeque<[u8; 12]> {
         .collect()
 }
 
+fn stale(message: &Value, now: u64) -> bool {
+    message["at"]
+        .as_u64()
+        .is_some_and(|at| now.saturating_sub(at) > STALE)
+}
+
 pub fn inbound(plain: &[u8]) -> Option<Inbound> {
     let message: Value = serde_json::from_slice(plain).ok()?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| {
+            u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+        });
+    if stale(&message, now) {
+        return None;
+    }
     match message["kind"].as_str()? {
         "message" => {
             let text = sombre_core::scrub::scrub(message["text"].as_str().unwrap_or_default());
@@ -252,21 +295,24 @@ impl Request {
 }
 
 pub fn parse(reader: &mut impl BufRead) -> Option<Request> {
+    let mut head = std::io::Read::take(&mut *reader, HEAD);
     let mut first = String::new();
-    reader.read_line(&mut first).ok()?;
+    head.read_line(&mut first).ok()?;
     let mut parts = first.split_whitespace();
     let method = parts.next()?.to_string();
     let target = parts.next()?;
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
     let mut length = 0;
     let mut agent = String::new();
-    loop {
+    let mut ended = false;
+    for _ in 0..=HEADERS {
         let mut line = String::new();
-        if reader.read_line(&mut line).ok()? == 0 {
-            break;
+        if head.read_line(&mut line).ok()? == 0 || !line.ends_with('\n') {
+            return None;
         }
         let line = line.trim_end();
         if line.is_empty() {
+            ended = true;
             break;
         }
         if let Some((name, value)) = line.split_once(':') {
@@ -277,18 +323,25 @@ pub fn parse(reader: &mut impl BufRead) -> Option<Request> {
             }
         }
     }
+    if !ended {
+        return None;
+    }
+    Some(Request {
+        agent,
+        body: body(reader, length)?,
+        method,
+        path: path.to_string(),
+        query: pairs(query),
+    })
+}
+
+fn body(reader: &mut impl BufRead, length: usize) -> Option<String> {
     if length > BODY {
         return None;
     }
     let mut body = vec![0; length];
     reader.read_exact(&mut body).ok()?;
-    Some(Request {
-        agent,
-        body: String::from_utf8(body).ok()?,
-        method,
-        path: path.to_string(),
-        query: pairs(query),
-    })
+    String::from_utf8(body).ok()
 }
 
 fn pairs(query: &str) -> Vec<(String, String)> {
@@ -314,8 +367,9 @@ fn since(log: &VecDeque<String>, base: usize, after: usize) -> (Vec<String>, usi
 
 fn push(log: &mut VecDeque<String>, base: &mut usize, item: String) {
     log.push_back(item);
-    if log.len() > KEPT {
-        log.pop_front();
+    let mut size: usize = log.iter().map(String::len).sum();
+    while log.len() > 1 && (log.len() > KEPT || size > BUDGET) {
+        size -= log.pop_front().map_or(0, |gone| gone.len());
         *base += 1;
     }
 }
@@ -337,6 +391,7 @@ fn missing(text: &str) -> Answer {
 impl Hub {
     pub fn new(open: bool, password: Option<String>) -> Self {
         Self {
+            active: AtomicUsize::new(0),
             changed: Condvar::new(),
             open,
             password,
@@ -348,34 +403,22 @@ impl Hub {
     pub fn create(&self) -> Option<(String, String)> {
         let mut rooms = self.rooms.lock().ok()?;
         if rooms.len() >= ROOMS
-            && let Some(oldest) = rooms.keys().next().cloned()
+            && let Some(idle) = rooms
+                .iter()
+                .min_by_key(|(_, room)| room.touched)
+                .map(|(id, _)| id.clone())
         {
-            rooms.remove(&oldest);
+            rooms.remove(&idle);
         }
         let room = hex(&random::<12>());
         let secret = hex(&random::<24>());
-        rooms.insert(
-            room.clone(),
-            Room {
-                epoch: hex(&random::<6>()),
-                secret: secret.clone(),
-                ..Room::default()
-            },
-        );
+        rooms.insert(room.clone(), Room::new(secret.clone(), Vec::new()));
         Some((room, secret))
     }
 
     fn restore(&self, room: &str, secret: &str, devices: Vec<Device>) {
         if let Ok(mut rooms) = self.rooms.lock() {
-            rooms.insert(
-                room.to_string(),
-                Room {
-                    devices,
-                    epoch: hex(&random::<6>()),
-                    secret: secret.to_string(),
-                    ..Room::default()
-                },
-            );
+            rooms.insert(room.to_string(), Room::new(secret.to_string(), devices));
         }
     }
 
@@ -432,39 +475,45 @@ impl Hub {
                 "this chat isn't paired anymore. run /pair on your computer for a new link",
             );
         };
+        room.touched = Instant::now();
         let device = request
             .get("device")
             .is_some_and(|device| room.devices.iter().any(|known| known.id == device));
         let owner = request.get("secret") == Some(room.secret.as_str());
         let answer = match (request.method.as_str(), action) {
             ("GET", "") => ok("text/html; charset=utf-8", served("phone.html", PAGE)),
-            ("POST", "pair") => match room
-                .tokens
-                .iter()
-                .position(|token| token == request.body.trim())
-            {
-                Some(spot) => {
-                    room.tokens.remove(spot);
-                    let fresh = hex(&random::<16>());
-                    room.devices.push(Device {
-                        id: fresh.clone(),
-                        label: label(&request.agent),
-                        since: sombre_core::now(),
-                    });
-                    ok("text/plain", fresh)
+            ("POST", "pair") => {
+                match room.tokens.iter().position(|(token, made)| {
+                    token == request.body.trim() && made.elapsed() < TICKET
+                }) {
+                    Some(spot) => {
+                        room.tokens.remove(spot);
+                        let fresh = hex(&random::<16>());
+                        room.devices.push(Device {
+                            id: fresh.clone(),
+                            label: label(&request.agent),
+                            since: sombre_core::now(),
+                        });
+                        ok("text/plain", fresh)
+                    }
+                    None => refuse(
+                        "this pairing link was already used. run /pair on your computer for a new one",
+                    ),
                 }
-                None => refuse(
-                    "this pairing link was already used. run /pair on your computer for a new one",
-                ),
-            },
+            }
             ("GET", "events") if device => {
                 let rooms = self.wait(rooms, |rooms| {
                     rooms
                         .get(&key)
                         .is_none_or(|room| room.outbase + room.out.len() != after)
                 });
-                return rooms.get(&key).map_or_else(
-                    || missing("this chat isn't paired anymore"),
+                let still = |room: &&Room| {
+                    request
+                        .get("device")
+                        .is_some_and(|device| room.devices.iter().any(|known| known.id == device))
+                };
+                return rooms.get(&key).filter(still).map_or_else(
+                    || refuse("this phone isn't paired anymore. run /pair on your computer for a new link"),
                     |room| {
                         let (items, next) = since(&room.out, room.outbase, after);
                         ok(
@@ -516,7 +565,9 @@ impl Hub {
                 ok("text/plain", "ok".to_string())
             }
             ("POST", "token") if owner => {
-                room.tokens.push(request.body.trim().to_string());
+                room.tokens.retain(|(_, made)| made.elapsed() < TICKET);
+                room.tokens
+                    .push((request.body.trim().to_string(), Instant::now()));
                 ok("text/plain", "ok".to_string())
             }
             ("GET", "devices") if owner => {
@@ -530,6 +581,7 @@ impl Hub {
             ("POST", "forget") if owner => {
                 room.devices
                     .retain(|device| device.id != request.body.trim());
+                room.tokens.clear();
                 ok("text/plain", "ok".to_string())
             }
             ("POST", "close") if owner => {
@@ -559,10 +611,18 @@ impl Hub {
             if self.stop.load(Ordering::SeqCst) {
                 break;
             }
-            if let Ok(stream) = stream {
-                let hub = Arc::clone(self);
-                thread::spawn(move || hub.serve(stream));
+            let Ok(stream) = stream else {
+                continue;
+            };
+            if self.active.fetch_add(1, Ordering::SeqCst) >= CONNECTIONS {
+                self.active.fetch_sub(1, Ordering::SeqCst);
+                continue;
             }
+            let hub = Arc::clone(self);
+            thread::spawn(move || {
+                hub.serve(stream);
+                hub.active.fetch_sub(1, Ordering::SeqCst);
+            });
         }
     }
 }
@@ -684,7 +744,7 @@ impl Link {
 }
 
 struct Session {
-    keys: Mutex<([u8; 32], Option<[u8; 32]>)>,
+    keys: Mutex<Keys>,
     saved: Mutex<String>,
     link: Link,
     messages: Mutex<VecDeque<Arrival>>,
@@ -714,8 +774,11 @@ impl Session {
 
     fn open(&self, item: &str) -> Option<Vec<u8>> {
         let (current, previous) = self.keys.lock().ok().map(|keys| *keys)?;
-        let (plain, nonce) = unseal(&current, item)
-            .or_else(|| previous.and_then(|previous| unseal(&previous, item)))?;
+        let (plain, nonce) = unseal(&current, item).or_else(|| {
+            previous
+                .filter(|(_, changed)| changed.elapsed() < GRACE)
+                .and_then(|(previous, _)| unseal(&previous, item))
+        })?;
         let mut seen = self.seen.lock().ok()?;
         fresh(&mut seen, nonce).then_some(plain)
     }
@@ -884,8 +947,7 @@ fn keep(session: &Session) {
     if path
         .parent()
         .is_some_and(|folder| std::fs::create_dir_all(folder).is_ok())
-        && std::fs::write(&path, &text).is_ok()
-        && sombre_harness::config::private(&path).is_ok()
+        && sombre_harness::config::secret(&path, &text).is_ok()
         && let Ok(mut saved) = session.saved.lock()
     {
         *saved = text;
@@ -983,9 +1045,13 @@ fn here_at(ip: IpAddr, bind: IpAddr, reach: Reach) -> io::Result<Link> {
     })
 }
 
-fn made(base: &str, name: &str) -> Result<Remote, String> {
+fn made(base: &str, name: &str, own: bool) -> Result<Remote, String> {
     let base = base.trim_end_matches('/').to_string();
-    let password = std::env::var("SOMBRE_RELAY_PASSWORD").unwrap_or_default();
+    let password = if own {
+        std::env::var("SOMBRE_RELAY_PASSWORD").unwrap_or_default()
+    } else {
+        String::new()
+    };
     let body = ureq::post(&format!("{base}/rooms?password={password}"))
         .send("")
         .map_err(|error| match error {
@@ -1031,9 +1097,9 @@ pub fn invite(reach: Reach, relay: Option<&str>) -> Result<(String, Reach), Stri
         Some(session) => session,
         None => start(
             match (reach, relay) {
-                (Reach::Hosted, _) => cloud(made(&hosted(), "sombre's relay")?),
+                (Reach::Hosted, _) => cloud(made(&hosted(), "sombre's relay", false)?),
                 (Reach::Relay, Some(base)) => {
-                    Link::There(made(base, &format!("the relay at {base}"))?)
+                    Link::There(made(base, &format!("the relay at {base}"), true)?)
                 }
                 (Reach::Relay, None) => return Err("there's no relay set".to_string()),
                 (reach, _) => here(reach)?,
@@ -1102,7 +1168,7 @@ fn devices_from(saved: &Value) -> Vec<Device> {
         .filter_map(|device| {
             Some(Device {
                 id: device["id"].as_str()?.to_string(),
-                label: device["label"].as_str()?.to_string(),
+                label: sombre_core::scrub::scrub(device["label"].as_str()?),
                 since: device["since"].as_u64()?,
             })
         })
@@ -1234,7 +1300,7 @@ pub fn devices() -> Vec<Device> {
         .filter_map(|device| {
             Some(Device {
                 id: device["id"].as_str()?.to_string(),
-                label: device["label"].as_str()?.to_string(),
+                label: sombre_core::scrub::scrub(device["label"].as_str()?),
                 since: device["since"].as_u64()?,
             })
         })
@@ -1255,7 +1321,7 @@ pub fn forget(id: &str, again: &[Value]) -> bool {
         &json!({"kind": "rekey", "key": URL_SAFE_NO_PAD.encode(fresh)}),
     );
     if let Ok(mut keys) = session.keys.lock() {
-        *keys = (fresh, Some(old));
+        *keys = (fresh, Some((old, Instant::now())));
     }
     for item in again {
         let mut item = item.clone();
@@ -1600,6 +1666,114 @@ mod tests {
             BODY + 1
         );
         assert!(parse(&mut BufReader::new(huge.as_bytes())).is_none());
+    }
+
+    #[test]
+    fn the_parser_refuses_endless_or_crowded_headers() {
+        let endless = format!("GET / HTTP/1.1\r\nX: {}", "a".repeat(64 * 1024));
+        assert!(parse(&mut BufReader::new(endless.as_bytes())).is_none());
+        let crowded = format!("GET / HTTP/1.1\r\n{}\r\n", "X: y\r\n".repeat(HEADERS + 2));
+        assert!(parse(&mut BufReader::new(crowded.as_bytes())).is_none());
+        let cut = "GET / HTTP/1.1\r\nX: y";
+        assert!(parse(&mut BufReader::new(cut.as_bytes())).is_none());
+    }
+
+    #[test]
+    fn a_forgotten_phone_gets_nothing_more_and_old_links_stop_working() {
+        let hub = Arc::new(Hub::new(true, None));
+        let (_, _, made) = hub.handle(&request("POST", "/rooms", &[], ""));
+        let made: Value = serde_json::from_str(&made).unwrap_or_default();
+        let room = made["room"].as_str().unwrap_or_default().to_string();
+        let secret = made["secret"].as_str().unwrap_or_default().to_string();
+        let path = |action: &str| format!("/r/{room}/{action}");
+        for token in ["t1", "t2"] {
+            hub.handle(&request(
+                "POST",
+                &path("token"),
+                &[("secret", &secret)],
+                token,
+            ));
+        }
+        let (_, _, phone) = hub.handle(&request("POST", &path("pair"), &[], "t1"));
+        let waiting = {
+            let hub = Arc::clone(&hub);
+            let events = path("events");
+            let phone = phone.clone();
+            thread::spawn(move || {
+                hub.handle(&request(
+                    "GET",
+                    &events,
+                    &[("device", &phone), ("after", "0")],
+                    "",
+                ))
+            })
+        };
+        thread::sleep(Duration::from_millis(200));
+        hub.handle(&request(
+            "POST",
+            &path("forget"),
+            &[("secret", &secret)],
+            &phone,
+        ));
+        hub.handle(&request(
+            "POST",
+            &path("out"),
+            &[("secret", &secret)],
+            "rekey",
+        ));
+        let (code, _, body) = waiting
+            .join()
+            .unwrap_or_else(|_| panic!("the poll panicked"));
+        assert!(code.starts_with("403"));
+        assert!(!body.contains("rekey"));
+        let (code, _, _) = hub.handle(&request("POST", &path("pair"), &[], "t2"));
+        assert!(code.starts_with("403"));
+    }
+
+    #[test]
+    fn a_room_keeps_its_logs_under_a_byte_budget() {
+        let mut log = VecDeque::new();
+        let mut base = 0;
+        let big = "x".repeat(6 * 1024 * 1024);
+        for _ in 0..10 {
+            push(&mut log, &mut base, big.clone());
+        }
+        let size: usize = log.iter().map(String::len).sum();
+        assert!(size <= BUDGET);
+        assert_eq!(base + log.len(), 10);
+        let mut single = VecDeque::new();
+        let mut start = 0;
+        push(&mut single, &mut start, "x".repeat(BUDGET + 1));
+        assert_eq!(single.len(), 1);
+    }
+
+    #[test]
+    fn a_full_relay_lets_go_of_the_room_idle_longest() {
+        let hub = Hub::new(true, None);
+        let first = hub.create().unwrap_or_default();
+        let second = hub.create().unwrap_or_default();
+        for _ in 2..ROOMS {
+            hub.create();
+        }
+        hub.handle(&request(
+            "GET",
+            &format!("/r/{}/devices", first.0),
+            &[("secret", &first.1)],
+            "",
+        ));
+        hub.create();
+        let rooms = hub.rooms.lock().unwrap_or_else(|error| panic!("{error}"));
+        assert!(rooms.contains_key(&first.0));
+        assert!(!rooms.contains_key(&second.0));
+        assert_eq!(rooms.len(), ROOMS);
+    }
+
+    #[test]
+    fn week_old_phone_messages_are_dropped() {
+        let now = 1_800_000_000_000;
+        assert!(stale(&json!({"at": now - STALE - 1}), now));
+        assert!(!stale(&json!({"at": now - 1000}), now));
+        assert!(!stale(&json!({"kind": "message"}), now));
     }
 
     #[test]
