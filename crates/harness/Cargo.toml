@@ -13,6 +13,10 @@ sombre-core.workspace = true
 toml = "1.2.1"
 ureq = { version = "3.5.1", features = ["json"] }
 
+[target.'cfg(windows)'.dependencies]
+keyring-core = "1.0.1"
+windows-native-keyring-store = { version = "1.1.0", default-features = false }
+
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.3", features = ["poll", "signal"] }
 

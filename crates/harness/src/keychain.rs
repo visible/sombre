@@ -1,8 +1,12 @@
+#[cfg(windows)]
+use std::collections::HashMap;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::io::Write;
+#[cfg(not(windows))]
 use std::process::{Command, Stdio};
 
 const SERVICE: &str = "sombre";
+#[cfg(not(windows))]
 const TOOL: &str = "/usr/bin/security";
 
 pub fn quote(text: &str) -> String {
@@ -55,12 +59,31 @@ pub fn save(account: &str, secret: &str) -> Result<(), String> {
     check(account, secret)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(windows)]
+fn entry(account: &str) -> Option<keyring_core::Entry> {
+    use keyring_core::api::CredentialStoreApi;
+    let modifiers = HashMap::from([("persistence", "Local")]);
+    windows_native_keyring_store::Store::new()
+        .ok()?
+        .build(SERVICE, account, Some(&modifiers))
+        .ok()
+}
+
+#[cfg(windows)]
+pub fn save(account: &str, secret: &str) -> Result<(), String> {
+    entry(account)
+        .ok_or("couldn't open the windows credential manager")?
+        .set_password(secret)
+        .map_err(|error| format!("couldn't save the key in the credential manager: {error}"))?;
+    check(account, secret)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 pub fn save(_: &str, _: &str) -> Result<(), String> {
     Err("there's no keychain support on this system yet".to_string())
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn check(account: &str, secret: &str) -> Result<(), String> {
     if load(account).as_deref() == Some(secret) {
         Ok(())
@@ -69,6 +92,15 @@ fn check(account: &str, secret: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(windows)]
+pub fn load(account: &str) -> Option<String> {
+    entry(account)?
+        .get_password()
+        .ok()
+        .filter(|key| !key.trim().is_empty())
+}
+
+#[cfg(not(windows))]
 pub fn load(account: &str) -> Option<String> {
     let mut command = if cfg!(target_os = "macos") {
         let mut command = Command::new(TOOL);
@@ -93,6 +125,14 @@ pub fn load(account: &str) -> Option<String> {
     (!key.is_empty()).then_some(key)
 }
 
+#[cfg(windows)]
+pub fn forget(account: &str) {
+    if let Some(entry) = entry(account) {
+        let _ = entry.delete_credential();
+    }
+}
+
+#[cfg(not(windows))]
 pub fn forget(account: &str) {
     let mut command = if cfg!(target_os = "macos") {
         let mut command = Command::new(TOOL);
@@ -115,6 +155,18 @@ pub fn forget(account: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn keeps_keys_in_the_windows_credential_manager() {
+        let account = format!("test-{}", std::process::id());
+        assert_eq!(save(&account, "sk-test-123"), Ok(()));
+        assert_eq!(load(&account).as_deref(), Some("sk-test-123"));
+        assert_eq!(save(&account, "sk-test-456"), Ok(()));
+        assert_eq!(load(&account).as_deref(), Some("sk-test-456"));
+        forget(&account);
+        assert_eq!(load(&account), None);
+    }
 
     #[test]
     fn quotes_keys_for_the_security_shell() {
