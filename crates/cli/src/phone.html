@@ -40,6 +40,7 @@
       body {
         margin: 0;
         min-height: 100dvh;
+        overflow-x: clip;
         padding-bottom: calc(var(--dock, 122px) + 12px + var(--keyboard, 0px));
       }
       button,
@@ -140,6 +141,18 @@
       @media (prefers-reduced-motion: reduce) {
         #feed {
           transition: none;
+        }
+      }
+      @media (max-width: 480px) {
+        html {
+          font-size: 13px;
+        }
+        main {
+          padding: 16px 14px;
+        }
+        header {
+          padding-right: 14px;
+          padding-left: 14px;
         }
       }
       #feed > * {
@@ -369,6 +382,10 @@
         color: var(--paper);
         font-weight: 600;
       }
+      .grid th,
+      .grid td:first-child {
+        white-space: nowrap;
+      }
       .grid tr:last-child td {
         border-bottom: 0;
       }
@@ -498,11 +515,12 @@
       }
       .printed {
         padding-left: 2ch;
+        overflow-x: auto;
         color: var(--body);
         font: inherit;
         font-size: 12.5px;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
+        white-space: pre;
+        scrollbar-width: none;
       }
       .note {
         padding-left: 2ch;
