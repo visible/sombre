@@ -7,13 +7,21 @@ export { Room } from "./room";
 
 const SITE = "https://sombre.ai";
 
+const kept: Record<string, string> = {
+  "/": "no-cache",
+  "/app.js": "no-cache",
+  "/home.js": "no-cache",
+  "/seen.js": "no-cache",
+  "/share.png": "public, max-age=86400",
+};
+
 const guarded = (response: Response, url: URL) => {
   if (response.webSocket) {
     return response;
   }
   const socket = `${url.protocol === "https:" ? "wss" : "ws"}://${url.host}`;
   const headers = new Headers(response.headers);
-  headers.set("Cache-Control", "no-store");
+  headers.set("Cache-Control", kept[url.pathname] ?? "no-store");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "no-referrer");
   if (url.protocol === "https:") {
@@ -45,6 +53,11 @@ const page = async (env: Env, url: URL) => {
 };
 
 const pages = new Set(["/home.js", "/seen.js", "/share.png"]);
+
+const served = (env: Env, request: Request, url: URL, name: string) =>
+  env.ASSETS.fetch(
+    new Request(new URL(name, url), { headers: request.headers })
+  );
 
 const scripts: Record<string, string> = {
   "/install": "/install.sh",
@@ -85,13 +98,13 @@ const answer = (request: Request, env: Env, url: URL) => {
     return create(request, env);
   }
   if (request.method === "GET" && url.pathname === "/app.js") {
-    return env.ASSETS.fetch(new URL("/app.js", url));
+    return served(env, request, url, "/app.js");
   }
   if (request.method === "GET" && url.pathname === "/") {
-    return env.ASSETS.fetch(new URL("/index.html", url));
+    return served(env, request, url, "/index.html");
   }
   if (request.method === "GET" && pages.has(url.pathname)) {
-    return env.ASSETS.fetch(new URL(url.pathname, url));
+    return served(env, request, url, url.pathname);
   }
   const script = scripts[url.pathname];
   if (request.method === "GET" && script) {
