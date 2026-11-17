@@ -44,7 +44,7 @@ const page = async (env: Env, url: URL) => {
   );
 };
 
-const pages = new Set(["/home.js", "/seen.js"]);
+const pages = new Set(["/home.js", "/seen.js", "/share.png"]);
 
 const scripts: Record<string, string> = {
   "/install": "/install.sh",
