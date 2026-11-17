@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
+import type { Gate } from "./gate";
 import type { Device } from "./log";
 import {
   KEPT,
@@ -17,7 +18,7 @@ import {
 
 export interface Env {
   ASSETS: Fetcher;
-  LIMIT: RateLimit;
+  GATES: DurableObjectNamespace<Gate>;
   ROOMS: DurableObjectNamespace<Room>;
 }
 

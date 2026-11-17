@@ -896,7 +896,8 @@ fn made(base: &str, name: &str) -> Result<Remote, String> {
         .send("")
         .map_err(|error| match error {
             ureq::Error::StatusCode(429) => {
-                "too many new pairings from this network. try /pair again in a minute".to_string()
+                "too many new pairings from this network. wait a few minutes and try /pair again"
+                    .to_string()
             }
             ureq::Error::StatusCode(403) => format!("{name} doesn't take new pairings"),
             _ => format!(

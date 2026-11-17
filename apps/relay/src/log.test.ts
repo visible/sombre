@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  BURST,
+  DAILY,
+  DAY,
   KEPT,
   LARGEST,
+  MINUTES,
+  allowed,
   append,
   cursor,
   empty,
@@ -10,6 +15,7 @@ import {
   hex,
   label,
   machines,
+  network,
   pack,
   rebuild,
   room,
@@ -112,5 +118,35 @@ describe("stored state", () => {
       label("Mozilla/5.0 (Linux; Android 16) Chrome/140 Mobile Safari")
     ).toBe("Android, Chrome");
     expect(label("curl/8")).toBe("browser");
+  });
+});
+
+describe("new pairings", () => {
+  test("allows a burst, then waits for the window to pass", () => {
+    const now = 1_000_000_000;
+    const burst = Array.from(
+      { length: BURST },
+      (_, index) => now - index * 1000
+    );
+    expect(allowed(burst.slice(1), now)).toBe(true);
+    expect(allowed(burst, now)).toBe(false);
+    expect(allowed(burst, now + MINUTES)).toBe(true);
+  });
+
+  test("caps a day no matter how slowly they come", () => {
+    const now = 5_000_000_000;
+    const day = Array.from(
+      { length: DAILY },
+      (_, index) => now - (index + 1) * MINUTES
+    );
+    expect(allowed(day.slice(1), now)).toBe(true);
+    expect(allowed(day, now)).toBe(false);
+    expect(allowed(day, now + DAY)).toBe(true);
+  });
+
+  test("counts a whole ipv6 /64 as one network", () => {
+    expect(network("2001:DB8:1:2:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1:2");
+    expect(network("2001:db8:1:2:1111:2222:3333:4444")).toBe("2001:db8:1:2");
+    expect(network("203.0.113.9")).toBe("203.0.113.9");
   });
 });

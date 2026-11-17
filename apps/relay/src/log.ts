@@ -153,3 +153,17 @@ export const label = (agent: string) => {
   const browser = browsers.find(([needle]) => agent.includes(needle))?.[1];
   return browser ? `${kind}, ${browser}` : kind;
 };
+
+export const MINUTES = 10 * 60 * 1000;
+export const DAY = 24 * 60 * 60 * 1000;
+export const BURST = 10;
+export const DAILY = 50;
+
+export const allowed = (stamps: number[], now: number) =>
+  stamps.filter((at) => now - at < MINUTES).length < BURST &&
+  stamps.filter((at) => now - at < DAY).length < DAILY;
+
+export const network = (address: string) =>
+  address.includes(":")
+    ? address.split(":").slice(0, 4).join(":").toLowerCase()
+    : address;

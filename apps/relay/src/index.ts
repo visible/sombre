@@ -1,7 +1,8 @@
-import { hex, room } from "./log";
+import { hex, network, room } from "./log";
 import type { Env } from "./room";
 import { GONE, refused } from "./room";
 
+export { Gate } from "./gate";
 export { Room } from "./room";
 
 const SITE = "https://sombre.ai";
@@ -41,12 +42,13 @@ const page = async (env: Env, url: URL) => {
 };
 
 const create = async (request: Request, env: Env) => {
-  const { success } = await env.LIMIT.limit({
-    key: request.headers.get("CF-Connecting-IP") ?? "",
-  });
-  if (!success) {
+  const address = network(request.headers.get("CF-Connecting-IP") ?? "");
+  const admitted = await env.GATES.get(env.GATES.idFromName(address)).admit(
+    Date.now()
+  );
+  if (!admitted) {
     return text(
-      "too many new pairings from this network. try again in a minute",
+      "too many new pairings from this network. wait a few minutes and try again",
       429
     );
   }
