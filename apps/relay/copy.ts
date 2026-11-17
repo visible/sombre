@@ -1,11 +1,15 @@
-const source = new URL("../../crates/cli/src/", import.meta.url);
-const target = new URL("public/", import.meta.url);
+import { readdir } from "node:fs/promises";
 
-await Bun.write(
-  new URL("phone.html", target),
-  Bun.file(new URL("phone.html", source))
-);
-await Bun.write(
-  new URL("app.js", target),
-  Bun.file(new URL("phone.js", source))
-);
+const source = `${import.meta.dir}/../../crates/cli/src`;
+const target = `${import.meta.dir}/public`;
+const statics = `${import.meta.dir}/static`;
+
+const names = await readdir(statics);
+
+await Promise.all([
+  Bun.write(`${target}/phone.html`, Bun.file(`${source}/phone.html`)),
+  Bun.write(`${target}/app.js`, Bun.file(`${source}/phone.js`)),
+  ...names.map((name) =>
+    Bun.write(`${target}/${name}`, Bun.file(`${statics}/${name}`))
+  ),
+]);

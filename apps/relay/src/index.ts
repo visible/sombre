@@ -41,6 +41,22 @@ const page = async (env: Env, url: URL) => {
   );
 };
 
+const pages = new Set(["/home.js", "/seen.js"]);
+
+const scripts: Record<string, string> = {
+  "/install": "/install.sh",
+  "/install.ps1": "/install.ps1",
+  "/install.sh": "/install.sh",
+};
+
+const plain = async (env: Env, url: URL, name: string) => {
+  const asset = await env.ASSETS.fetch(new URL(name, url));
+  return new Response(asset.body, {
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    status: asset.status,
+  });
+};
+
 const create = async (request: Request, env: Env) => {
   const address = network(request.headers.get("CF-Connecting-IP") ?? "");
   const admitted = await env.GATES.get(env.GATES.idFromName(address)).admit(
@@ -64,6 +80,16 @@ const answer = (request: Request, env: Env, url: URL) => {
   }
   if (request.method === "GET" && url.pathname === "/app.js") {
     return env.ASSETS.fetch(new URL("/app.js", url));
+  }
+  if (request.method === "GET" && url.pathname === "/") {
+    return env.ASSETS.fetch(new URL("/index.html", url));
+  }
+  if (request.method === "GET" && pages.has(url.pathname)) {
+    return env.ASSETS.fetch(new URL(url.pathname, url));
+  }
+  const script = scripts[url.pathname];
+  if (request.method === "GET" && script) {
+    return plain(env, url, script);
   }
   const found = room(url.pathname);
   if (!found) {

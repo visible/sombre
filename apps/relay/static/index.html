@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>sombre</title>
+    <meta
+      name="description"
+      content="step away. the session comes with you. install sombre and take your coding agent anywhere."
+    />
+    <meta name="theme-color" content="#0b0c0d" />
+    <meta name="color-scheme" content="dark" />
+    <meta property="og:title" content="sombre" />
+    <meta
+      property="og:description"
+      content="step away. the session comes with you."
+    />
+    <meta property="og:url" content="https://sombre.si" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%230b0c0d'/%3E%3Cg stroke='%23ff5b14' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M20 18v-7M13 20l-4-4M27 20l4-4M10 25H4M30 25h6'/%3E%3C/g%3E%3Cpath d='M6 29h28' stroke='%23edefef' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <script src="/seen.js"></script>
+    <style>
+      :root {
+        --night: #0b0c0d;
+        --rim: #272a2c;
+        --paper: #edefef;
+        --body: #c3c8ca;
+        --fog: #9aa0a3;
+        --ember: #ff5b14;
+        --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+        --out: cubic-bezier(0.16, 1, 0.3, 1);
+        --left: clamp(20px, 10vw, 160px);
+        --top: clamp(48px, 16vh, 168px);
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: var(--night);
+        color: var(--body);
+        font-family: var(--mono);
+        font-size: 14px;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      ::selection {
+        background: var(--ember);
+        color: var(--night);
+      }
+
+      p,
+      h1,
+      h2,
+      pre {
+        margin: 0;
+      }
+
+      .boot {
+        position: fixed;
+        top: var(--top);
+        left: var(--left);
+        color: var(--fog);
+        font: inherit;
+        pointer-events: none;
+      }
+
+      .boot div {
+        min-height: 1.7em;
+        white-space: pre;
+      }
+
+      .boot .ok {
+        color: var(--ember);
+      }
+
+      html:not([data-boot]) .boot {
+        display: none;
+      }
+
+      html[data-boot] main {
+        opacity: 0;
+        animation: wake 1ms 5s forwards;
+      }
+
+      main {
+        width: min(100% - var(--left) - 20px, 44rem);
+        margin-left: var(--left);
+        padding: var(--top) 0 64px;
+      }
+
+      .mark {
+        margin-bottom: 28px;
+        color: var(--ember);
+        font: inherit;
+        line-height: 1.25;
+      }
+
+      .mark span {
+        color: var(--fog);
+      }
+
+      h1 {
+        color: var(--paper);
+        font-size: inherit;
+        font-weight: 600;
+      }
+
+      h1 .tail {
+        color: var(--fog);
+        font-weight: 400;
+      }
+
+      .note {
+        color: var(--fog);
+        font-size: inherit;
+        font-weight: 400;
+      }
+
+      .block {
+        margin-top: 32px;
+      }
+
+      .command {
+        display: grid;
+        grid-template-columns: 4ch minmax(0, max-content) auto;
+        justify-content: start;
+        align-items: center;
+        min-height: 36px;
+      }
+
+      .command + .note {
+        margin-top: 10px;
+      }
+
+      .prompt {
+        color: var(--ember);
+        user-select: none;
+      }
+
+      code {
+        color: var(--paper);
+        font: inherit;
+        overflow-x: auto;
+        scrollbar-width: none;
+        white-space: nowrap;
+      }
+
+      .copy {
+        min-width: 10ch;
+        min-height: 32px;
+        margin-left: 2ch;
+        padding: 0 4px;
+        border: 0;
+        background: transparent;
+        color: var(--fog);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .copy:hover,
+      a:hover {
+        background: var(--paper);
+        color: var(--night);
+      }
+
+      .copy:active,
+      a:active {
+        background: var(--fog);
+        color: var(--night);
+      }
+
+      .copy:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+
+      .copy[data-done] {
+        color: var(--ember);
+      }
+
+      .copy[data-done]:hover {
+        color: var(--night);
+      }
+
+      .then {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0 3ch;
+        margin: 0;
+      }
+
+      .then dt {
+        color: var(--paper);
+      }
+
+      .then dd {
+        margin: 0;
+        color: var(--fog);
+      }
+
+      .sealed {
+        cursor: default;
+      }
+
+      footer {
+        display: flex;
+        gap: 3ch;
+      }
+
+      a {
+        margin: 0 -4px;
+        padding: 2px 4px;
+        color: var(--fog);
+        text-decoration: underline;
+        text-decoration-color: var(--rim);
+        text-underline-offset: 4px;
+      }
+
+      a:hover {
+        text-decoration: none;
+      }
+
+      .idle {
+        margin-top: 20px;
+        color: var(--ember);
+      }
+
+      .cursor {
+        display: inline-block;
+        width: 1ch;
+        height: 1.15em;
+        margin-left: 1ch;
+        background: var(--paper);
+        vertical-align: -0.2em;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--ember);
+        outline-offset: 2px;
+      }
+
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      @media (max-width: 640px) {
+        html,
+        body {
+          font-size: 13px;
+        }
+
+        code {
+          padding-right: 24px;
+          mask-image: linear-gradient(
+            90deg,
+            black calc(100% - 24px),
+            transparent
+          );
+        }
+
+        .copy {
+          min-width: 8ch;
+          margin-left: 1ch;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        html[data-landed] .rest {
+          animation: rise 520ms var(--out) both;
+          animation-delay: calc(var(--n) * 60ms);
+        }
+
+        .cursor {
+          animation: blink 1060ms steps(1) 6;
+        }
+      }
+
+      @keyframes wake {
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <pre class="boot" aria-hidden="true"></pre>
+    <main>
+      <pre class="mark rest" id="mark" style="--n: 0" aria-hidden="true">
+      |
+  \       /
+--         --
+<span>─────────────</span></pre>
+      <h1 class="rest" style="--n: 1" aria-label="sombre.si">
+        <span id="name" aria-hidden="true">sombre</span
+        ><span class="tail" aria-hidden="true">.si</span>
+      </h1>
+      <p class="rest" style="--n: 2">step away. the session comes with you.</p>
+      <section class="rest block" style="--n: 3" aria-labelledby="install">
+        <h2 class="sr" id="install">install</h2>
+        <p class="note" aria-hidden="true"># macos and linux</p>
+        <div class="command">
+          <span class="prompt" aria-hidden="true">$</span>
+          <code>curl -fsSL https://sombre.si/install | sh</code>
+          <button
+            class="copy"
+            type="button"
+            data-copy="curl -fsSL https://sombre.si/install | sh"
+            aria-label="copy the install command for macos and linux"
+          >
+            [copy]
+          </button>
+        </div>
+        <p class="note" aria-hidden="true"># windows</p>
+        <div class="command">
+          <span class="prompt" aria-hidden="true">PS&gt;</span>
+          <code>irm https://sombre.si/install.ps1 | iex</code>
+          <button
+            class="copy"
+            type="button"
+            data-copy="irm https://sombre.si/install.ps1 | iex"
+            aria-label="copy the install command for windows"
+          >
+            [copy]
+          </button>
+        </div>
+      </section>
+      <section class="rest block" style="--n: 4" aria-labelledby="then">
+        <h2 class="note" id="then"># then</h2>
+        <dl class="then">
+          <dt>sombre</dt>
+          <dd>in any project folder</dd>
+          <dt>/pair</dt>
+          <dd>point your phone at the code</dd>
+        </dl>
+      </section>
+      <p class="note sealed rest block" style="--n: 5">
+        <span class="sr"
+          >the relay only ever carries sealed messages. it can't read a
+          word.</span
+        ><span aria-hidden="true"># </span
+        ><span id="sealed" aria-hidden="true"
+          >the relay only ever carries sealed messages. it can't read a
+          word.</span
+        >
+      </p>
+      <footer class="rest block" style="--n: 6">
+        <a href="https://sombre.ai">sombre.ai</a>
+        <a href="https://github.com/visible/sombre">github</a>
+      </footer>
+      <p class="idle rest" style="--n: 7" aria-hidden="true">
+        $<span class="cursor"></span>
+      </p>
+      <p class="sr" id="said" aria-live="polite"></p>
+    </main>
+    <script type="module" src="/home.js"></script>
+  </body>
+</html>
