@@ -16,8 +16,11 @@ use serde_json::{Value, json};
 use crate::tailscale::Node;
 use crate::wire::Wire;
 
-const PAGE: &str = include_str!("phone.html");
-const SCRIPT: &str = include_str!("phone.js");
+mod tailscale;
+mod wire;
+
+const PAGE: &str = include_str!("../../cli/src/phone.html");
+const SCRIPT: &str = include_str!("../../cli/src/phone.js");
 const BODY: usize = 6 * 1024 * 1024;
 const PICTURE: u64 = 4 * 1024 * 1024;
 const KEPT: usize = 4_000;
@@ -1403,7 +1406,9 @@ fn pictured(detail: &str) -> bool {
         && path
             .extension()
             .and_then(|ending| ending.to_str())
-            .is_some_and(|ending| crate::attach::ENDINGS.contains(&ending.to_lowercase().as_str()))
+            .is_some_and(|ending| {
+                sombre_harness::image::ENDINGS.contains(&ending.to_lowercase().as_str())
+            })
 }
 
 pub fn said(text: &str, images: &[std::path::PathBuf]) {

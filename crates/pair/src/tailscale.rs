@@ -32,7 +32,7 @@ impl Node {
 }
 
 pub fn find() -> Option<Node> {
-    crate::relay::route(Ipv4Addr::new(100, 100, 100, 100))
+    crate::route(Ipv4Addr::new(100, 100, 100, 100))
         .filter(|ip| tailnet(*ip))
         .map(Node::Kernel)
         .or_else(|| sockets().into_iter().find_map(|socket| ask(&socket)))

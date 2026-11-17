@@ -3874,16 +3874,14 @@ dependencies = [
  "ctrlc",
  "nix 0.31.3",
  "qrcode",
- "ring",
  "serde_json",
  "sombre-core",
  "sombre-engine",
  "sombre-harness",
+ "sombre-pair",
  "tempfile",
  "textwrap",
- "tungstenite",
  "unicode-width",
- "ureq",
 ]
 
 [[package]]
@@ -3943,6 +3941,20 @@ dependencies = [
  "toml 1.2.1+spec-1.1.0",
  "ureq",
  "windows-native-keyring-store",
+]
+
+[[package]]
+name = "sombre-pair"
+version = "0.1.1"
+dependencies = [
+ "base64 0.23.1",
+ "ring",
+ "serde_json",
+ "sombre-core",
+ "sombre-harness",
+ "tempfile",
+ "tungstenite",
+ "ureq",
 ]
 
 [[package]]

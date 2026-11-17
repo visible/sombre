@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-pub const ENDINGS: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
+pub use sombre_harness::image::ENDINGS;
 
 pub fn tokens(text: &str) -> Vec<(Range<usize>, String)> {
     let mut found = Vec::new();

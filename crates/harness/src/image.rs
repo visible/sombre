@@ -5,6 +5,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 
 pub const LIMIT: u64 = 20 * 1024 * 1024;
+pub const ENDINGS: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
 
 pub fn kind(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {

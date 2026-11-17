@@ -1,0 +1,24 @@
+[package]
+name = "sombre-pair"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64 = "0.23.1"
+ring = "0.17.14"
+serde_json.workspace = true
+sombre-core.workspace = true
+sombre-harness.workspace = true
+tungstenite = { version = "0.30.0", default-features = false, features = [
+  "handshake",
+  "rustls-tls-webpki-roots",
+] }
+ureq = "3.5.1"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

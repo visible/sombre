@@ -14,12 +14,9 @@ mod menu;
 mod pane;
 mod provider;
 mod question;
-mod relay;
 mod size;
 mod streak;
-mod tailscale;
 mod view;
-mod wire;
 
 use std::env;
 use std::io::{self, IsTerminal};
@@ -29,6 +26,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use sombre_core::{Agent, Lookup, Roots, Session, ago, find, now, scan, transcript};
 use sombre_engine::Engine;
+use sombre_pair as relay;
 
 use sombre_harness::config::Config;
 
