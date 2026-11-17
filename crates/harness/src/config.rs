@@ -79,6 +79,8 @@ pub struct Config {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub footer: Vec<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub providers: BTreeMap<String, Provider>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]

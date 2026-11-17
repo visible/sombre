@@ -252,6 +252,7 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                         view::note("press ctrl-c again to exit");
                         continue;
                     }
+                    crate::compose::Read::Stale => continue,
                     crate::compose::Read::Cycle => {
                         cycle(&mut engine, roots.as_ref());
                         continue;
@@ -1320,16 +1321,7 @@ pub fn open(session: &Session) -> Option<Engine> {
 }
 
 fn footer(engine: &Engine) -> Vec<String> {
-    let place = view::home(&engine.cwd);
-    [
-        Some(engine.name().to_string()),
-        engine.label.clone(),
-        Some(engine.mode.name().to_string()),
-        Some(place),
-    ]
-    .into_iter()
-    .flatten()
-    .collect()
+    crate::footer::parts(engine)
 }
 
 fn screen(engine: &Engine, history: &[Event]) {

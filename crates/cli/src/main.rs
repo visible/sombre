@@ -6,6 +6,7 @@ mod clipboard;
 mod complete;
 mod compose;
 mod dock;
+mod footer;
 mod install;
 mod mark;
 mod markdown;

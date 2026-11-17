@@ -987,15 +987,17 @@ fn shorten(part: &str, room: usize) -> String {
 
 pub fn footer(parts: &[String], columns: usize) -> String {
     let room = columns.saturating_sub(3);
+    let size = |part: &str| crate::dock::visible(part);
     let mut parts = parts.to_vec();
     loop {
-        let used = parts.iter().map(|part| part.width()).sum::<usize>()
-            + 2 * parts.len().saturating_sub(1);
+        let used =
+            parts.iter().map(|part| size(part)).sum::<usize>() + 2 * parts.len().saturating_sub(1);
         let Some((index, widest)) = parts
             .iter()
             .enumerate()
-            .max_by_key(|(_, part)| part.width())
-            .map(|(index, part)| (index, part.width()))
+            .filter(|(_, part)| !part.contains('\u{1b}'))
+            .max_by_key(|(_, part)| size(part))
+            .map(|(index, part)| (index, size(part)))
         else {
             break;
         };
@@ -1004,7 +1006,13 @@ pub fn footer(parts: &[String], columns: usize) -> String {
         }
         parts[index] = shorten(&parts[index], widest.saturating_sub(used - room).max(8));
     }
-    format!("  {}", dim(&fit(&parts.join("  "), room)))
+    let line = parts.join("  ");
+    let line = if size(&line) > room {
+        fit(&crate::dock::bare(&line), room)
+    } else {
+        line
+    };
+    format!("  {}", dim(&line))
 }
 
 pub fn step(label: &str, detail: &str, cwd: &Path) {

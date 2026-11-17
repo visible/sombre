@@ -392,6 +392,7 @@ pub enum Read {
     Interrupted,
     Cycle,
     Woke,
+    Stale,
     Eof,
 }
 
@@ -508,6 +509,7 @@ pub fn read(
     let mut remote: Option<crate::relay::Arrival> = None;
     let mut cycled = false;
     let mut woken = false;
+    let mut stale = false;
     let outcome = loop {
         let columns = view::width();
         let hint = (composer.cursor == composer.text.len() && !composer.text.contains('\n'))
@@ -565,6 +567,10 @@ pub fn read(
                 replay();
                 drawn = false;
                 break None;
+            }
+            if crate::footer::changed() {
+                stale = true;
+                break Some(Event::FocusLost);
             }
             match event::poll(Duration::from_millis(100)) {
                 Ok(true) => match event::read() {
@@ -646,6 +652,9 @@ pub fn read(
     }
     if woken {
         return Read::Woke;
+    }
+    if stale {
+        return Read::Stale;
     }
     if let (Some(true), Some(arrival)) = (outcome, remote) {
         view::typed(false, &arrival.text);

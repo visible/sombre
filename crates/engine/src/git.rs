@@ -246,6 +246,33 @@ pub fn branch(cwd: &Path, name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
+pub fn head(cwd: &Path) -> Option<String> {
+    let top = root(cwd)?;
+    run(git(&top).args(["symbolic-ref", "--quiet", "--short", "HEAD"]))
+        .ok()
+        .map(|text| text.trim().to_string())
+        .filter(|name| !name.is_empty())
+}
+
+pub fn opened(cwd: &Path) -> Option<(u64, String)> {
+    let top = root(cwd)?;
+    let program = sombre_harness::process::find("gh")?;
+    let text = run(tool(&program, &top).args([
+        "pr",
+        "view",
+        "--json",
+        "number,url,state",
+        "-q",
+        r#"select(.state == "OPEN") | "\(.number) \(.url)""#,
+    ]))
+    .ok()?;
+    let (number, url) = text.trim().split_once(' ')?;
+    let url = url.trim();
+    (url.starts_with("https://") && !url.chars().any(char::is_control))
+        .then(|| Some((number.parse().ok()?, url.to_string())))
+        .flatten()
+}
+
 pub fn request(cwd: &Path) -> Result<String, String> {
     let top = root(cwd).ok_or("this folder isn't a git repository")?;
     let program = sombre_harness::process::find("gh")
