@@ -19,7 +19,7 @@ export interface Event {
 }
 
 export const devices: Record<Device, string> = {
-  mac: "On your Mac",
+  mac: "On your computer",
   phone: "From your phone",
 };
 

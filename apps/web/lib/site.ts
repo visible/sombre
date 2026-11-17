@@ -1,6 +1,6 @@
 export const site = {
   description:
-    "Sombre runs Claude Code and Codex on your Mac. Open the same session on your phone and keep working while you're away from your desk.",
+    "Sombre runs Claude Code and Codex on your computer. Open the same session on your phone and keep working while you're away from your desk.",
   email: "hello@sombre.ai",
   name: "sombre",
   repo: "https://github.com/visible/sombre",

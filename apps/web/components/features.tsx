@@ -19,7 +19,7 @@ const features: Feature[] = [
     art: <Local />,
     body: "The agent runs locally. Your phone sends messages and receives updates, nothing more.",
     cell: "border-b lg:col-span-7 lg:border-r",
-    title: "Your code stays on your Mac",
+    title: "Your code stays on your computer",
   },
   {
     art: <Approve />,

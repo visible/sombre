@@ -17,7 +17,7 @@ export const Statement = () => (
         data-split=""
         id="stays"
       >
-        The agent, the files and the tools never leave your Mac. Only the
+        The agent, the files and the tools never leave your computer. Only the
         conversation goes out the door.
       </h2>
       <Link

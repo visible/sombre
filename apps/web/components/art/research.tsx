@@ -103,7 +103,7 @@ export const Research = () => (
     <Window
       className="absolute top-10 left-[calc(50%-245px)] w-[310px] max-sm:left-4 max-sm:w-[250px]"
       name="atlas"
-      title={<Live>Mac</Live>}
+      title={<Live>Computer</Live>}
     >
       <div className="px-4 pt-3.5 pb-10">
         <Trace />

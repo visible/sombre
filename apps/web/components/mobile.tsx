@@ -74,7 +74,7 @@ export const Mobile = ({
   <Phone className={className}>
     <div className="mb-5 flex items-center justify-between">
       <p className="text-ink text-[12px] font-medium">atlas</p>
-      <Live>Live on your Mac</Live>
+      <Live>Live on your computer</Live>
     </div>
     <Body screen={screen} />
   </Phone>

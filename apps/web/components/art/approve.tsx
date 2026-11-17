@@ -11,7 +11,7 @@ export const Approve = () => (
   <Phone className="absolute top-6 left-1/2 h-[330px] w-[236px] -translate-x-1/2">
     <div className="mb-4 flex items-center justify-between">
       <p className="text-ink text-[12px] font-medium">atlas</p>
-      <Live>Live on your Mac</Live>
+      <Live>Live on your computer</Live>
     </div>
     <Lines lines={before} size="small" />
     <div className="border-line mt-3 rounded-xl border bg-white p-3 shadow-[0_10px_24px_-18px_rgb(15_16_17/0.4)]">

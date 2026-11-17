@@ -152,7 +152,7 @@ export const Replay = () => {
                 <span className="text-meta font-mono text-[10px]">
                   {event.time}
                 </span>
-                <Live>{phone ? "Phone" : "Mac"}</Live>
+                <Live>{phone ? "Phone" : "Computer"}</Live>
               </span>
             }
           >

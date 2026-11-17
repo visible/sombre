@@ -6,7 +6,7 @@ export const Hero = () => (
   <section aria-labelledby="title" data-desk="">
     <div className="@container px-5 pt-8 pb-12 sm:px-8 lg:pt-6 lg:pb-12">
       <p className="text-ink font-mono text-[12px] leading-[1.35] tracking-[0.02em] uppercase lg:hidden">
-        For macOS.
+        For macOS, Linux, and Windows.
         <br />
         Phone in any browser.
       </p>
@@ -25,11 +25,11 @@ export const Hero = () => (
           </span>
         </h1>
         <p className="text-ink hidden font-mono text-[12px] leading-[1.35] tracking-[0.02em] uppercase lg:col-span-7 lg:col-start-1 lg:row-start-3 lg:mt-5 lg:block">
-          For macOS. Phone in any browser.
+          For macOS, Linux, and Windows. Phone in any browser.
         </p>
         <div className="relative mt-6 lg:col-span-5 lg:col-start-8 lg:row-span-2 lg:row-start-2 lg:mt-12 lg:self-start">
           <p className="text-body max-w-[34rem] text-[17px] leading-relaxed">
-            Sombre runs Claude Code and Codex on your Mac. Open the same
+            Sombre runs Claude Code and Codex on your computer. Open the same
             conversation on your phone to answer questions, approve changes, and
             keep work moving while you&apos;re out.
           </p>

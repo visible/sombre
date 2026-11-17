@@ -27,9 +27,9 @@ export const Demo = () => (
     className="relative mx-auto lg:h-[600px] lg:w-[940px]"
   >
     <figcaption className="sr-only" id="demo">
-      An example session. A developer asks the agent on their Mac to fix a flaky
-      checkout test, then continues on their phone, approves a test run, and
-      gets the fix confirmed.
+      An example session. A developer asks the agent on their computer to fix a
+      flaky checkout test, then continues on their phone, approves a test run,
+      and gets the fix confirmed.
     </figcaption>
     <div
       aria-hidden="true"
@@ -100,7 +100,7 @@ export const Demo = () => (
             style={{ animationDelay: ms(handoff + 500) }}
           >
             <span className="bg-ember size-1.5 rounded-full" />
-            Live on your Mac
+            Live on your computer
           </p>
         </div>
         <Thread device="phone" entries={entries} />

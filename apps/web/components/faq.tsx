@@ -3,8 +3,8 @@ import { Tag } from "@/components/tag";
 const questions = [
   {
     answer:
-      "Yes. The agent runs on your machine, so it needs to be awake and online while you work from your phone.",
-    question: "Does my machine need to stay on?",
+      "Yes. The agent runs on your computer, so it needs to be awake and online while you work from your phone.",
+    question: "Does my computer need to stay on?",
   },
   {
     answer:

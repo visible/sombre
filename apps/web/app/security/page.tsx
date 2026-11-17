@@ -6,21 +6,21 @@ import { site } from "@/lib/site";
 
 export const metadata: Metadata = page(
   "/security",
-  "How Sombre keeps your code on your Mac",
-  "How Sombre keeps your code on your Mac while you continue sessions from your phone."
+  "How Sombre keeps your code on your computer",
+  "How Sombre keeps your code on your computer while you continue sessions from your phone."
 );
 
 const principles = [
   {
-    body: "The agent runs on your machine, with your files and your tools. Sombre is designed so your repository never leaves your Mac.",
-    title: "Your code stays on your Mac",
+    body: "The agent runs on your computer, with your files and your tools. Sombre is designed so your repository never leaves it.",
+    title: "Your code stays on your computer",
   },
   {
-    body: "Your phone and your Mac talk through a relay that passes messages, approvals, and tool output between them. It doesn't run code or keep your files.",
+    body: "Your phone and your computer talk through a relay that passes messages, approvals, and tool output between them. It never runs code, and everything it carries is sealed so only your devices can read it.",
     title: "The relay only carries messages",
   },
   {
-    body: "Commands and file edits wait for your approval, on your Mac or from your phone. You decide what the agent is allowed to do.",
+    body: "Commands and file edits wait for your approval, on your computer or from your phone. You decide what the agent is allowed to do.",
     title: "Nothing runs without your say",
   },
   {
@@ -32,8 +32,8 @@ const principles = [
 const Security = () => (
   <Shell
     facts={[
-      { label: "Agent runs on", value: "Your Mac" },
-      { label: "Code sent to relay", value: "None" },
+      { label: "Agent runs on", value: "Your computer" },
+      { label: "Relay can read", value: "Nothing" },
       { label: "Runs without approval", value: "Nothing" },
     ]}
     lead="Sombre lets you leave your desk without handing your code to anyone. Here's how it's designed to keep that promise."

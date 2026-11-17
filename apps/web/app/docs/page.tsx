@@ -12,7 +12,7 @@ export const metadata: Metadata = page(
 
 const topics = [
   {
-    body: "Download the Mac app and sign in to the agents you already use.",
+    body: "Install Sombre on your computer and sign in to the agents you already use.",
     title: "Install Sombre",
   },
   {
@@ -42,7 +42,7 @@ const Docs = () => (
     facts={[
       { label: "Status", value: "With the first build" },
       { label: "Guides planned", value: String(topics.length) },
-      { label: "Platform", value: "macOS" },
+      { label: "Platform", value: "macOS, Linux, Windows" },
     ]}
     lead="Docs arrive with the first build. Here's what they'll cover, and you can get early access to hear when they're ready."
     tag="Docs"

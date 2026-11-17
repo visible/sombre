@@ -2,10 +2,10 @@ import { Tag } from "@/components/tag";
 
 const steps = [
   {
-    body: "Open a project and pick Claude Code or Codex. The agent runs on your machine, with your files and your tools.",
+    body: "Open a project and pick Claude Code or Codex. The agent runs on your computer, with your files and your tools.",
     place: "At your desk",
     time: "9:41",
-    title: "Start a session on your Mac",
+    title: "Start a session on your computer",
   },
   {
     body: "Scan the code on screen or open your sombre.si link. It runs in the browser, so there's nothing to install.",

@@ -6,7 +6,7 @@ import type { Line } from "@/components/art/terminal";
 const lines: Line[] = [
   { text: "sombre", tone: "command" },
   { text: "Starting Claude Code in ~/code/atlas", tone: "output" },
-  { aside: "pid 4182", text: "Agent running on this Mac", tone: "done" },
+  { aside: "pid 4182", text: "Agent running on this computer", tone: "done" },
   { aside: "0 B sent", text: "Files stay on disk", tone: "done" },
   { aside: "iPhone", text: "Phone paired", tone: "done" },
   { text: "The relay only carries messages", tone: "output" },

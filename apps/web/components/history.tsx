@@ -22,7 +22,7 @@ export const History = () => (
         </h2>
         <p className="text-body mt-5 max-w-[46ch] text-[16px] leading-relaxed">
           One history per session. Scrub through it to replay what the agent did
-          on your Mac and what you did from your phone.
+          on your computer and what you did from your phone.
         </p>
       </div>
     </div>

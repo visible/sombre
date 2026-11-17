@@ -12,15 +12,15 @@
 > what is this?
 
   a desktop app for coding agents.
-  start a session on your machine, keep it going from your phone.
+  start a session on your computer, keep it going from your phone.
 
 > features?
 
-  ✓ runs claude code and codex on your machine
+  ✓ runs claude code and codex on macos, linux, and windows
   ✓ continue any session from your phone's browser
   ✓ approve commands and edits from anywhere
   ✓ one history per session, synced to both screens
-  ✓ your code stays on your machine
+  ✓ your code stays on your computer
 
 > status?
 
