@@ -751,6 +751,7 @@ struct Session {
     answers: Mutex<VecDeque<(String, bool)>>,
     replies: Mutex<VecDeque<(String, Option<Vec<String>>)>>,
     seen: Mutex<VecDeque<[u8; 12]>>,
+    read: AtomicUsize,
     stop: AtomicBool,
 }
 
@@ -811,7 +812,7 @@ fn live() -> Option<Arc<Session>> {
 }
 
 fn pull(session: &Session) {
-    let mut after = 0;
+    let mut after = session.read.load(Ordering::SeqCst);
     while !session.stop.load(Ordering::SeqCst) {
         let Some(body) = session
             .link
@@ -827,6 +828,7 @@ fn pull(session: &Session) {
             .as_u64()
             .and_then(|next| usize::try_from(next).ok())
             .unwrap_or(after);
+        session.read.store(after, Ordering::SeqCst);
         for item in reply["items"]
             .as_array()
             .into_iter()
@@ -926,6 +928,7 @@ fn snapshot(session: &Session) -> Value {
             saved["room"] = json!(remote.room);
             saved["secret"] = json!(remote.secret);
             saved["relay"] = json!(remote.base);
+            saved["read"] = json!(session.read.load(Ordering::SeqCst));
         }
         Link::Cloud(remote, _) => {
             saved["room"] = json!(remote.room);
@@ -954,7 +957,12 @@ fn keep(session: &Session) {
     }
 }
 
-fn start(link: Link, key: [u8; 32], seen: VecDeque<[u8; 12]>) -> Arc<Session> {
+fn start(link: Link, key: [u8; 32], seen: VecDeque<[u8; 12]>, read: usize) -> Arc<Session> {
+    let read = if matches!(link, Link::There(_)) {
+        read
+    } else {
+        0
+    };
     let pause = match link {
         Link::Here { .. } => Duration::from_secs(2),
         Link::There(_) | Link::Cloud(..) => Duration::from_secs(20),
@@ -966,6 +974,7 @@ fn start(link: Link, key: [u8; 32], seen: VecDeque<[u8; 12]>) -> Arc<Session> {
         link,
         messages: Mutex::new(VecDeque::new()),
         saved: Mutex::new(String::new()),
+        read: AtomicUsize::new(read),
         seen: Mutex::new(seen),
         stop: AtomicBool::new(false),
     });
@@ -1109,6 +1118,7 @@ pub fn invite(reach: Reach, relay: Option<&str>) -> Result<(String, Reach), Stri
             },
             random(),
             VecDeque::new(),
+            0,
         ),
     };
     let token = hex(&random::<16>());
@@ -1286,7 +1296,11 @@ fn reopen() -> Result<bool, String> {
             None => link,
         }
     };
-    start(link, key, remembered(&saved));
+    let read = saved["read"]
+        .as_u64()
+        .and_then(|read| usize::try_from(read).ok())
+        .unwrap_or(0);
+    start(link, key, remembered(&saved), read);
     Ok(true)
 }
 
@@ -1500,6 +1514,7 @@ mod tests {
             link,
             messages: Mutex::new(VecDeque::new()),
             saved: Mutex::new(String::new()),
+            read: AtomicUsize::new(0),
             seen: Mutex::new(VecDeque::new()),
             stop: AtomicBool::new(false),
         }
