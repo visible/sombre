@@ -591,11 +591,15 @@ pub fn pick<'a>(sessions: &'a [Session], cwd: &Path, all: bool) -> Option<&'a Se
             } else {
                 String::new()
             };
+            let last = sombre_core::latest(session)
+                .filter(|latest| *latest != session.title)
+                .map(|latest| format!("  last: {latest}"))
+                .unwrap_or_default();
             menu.item(
                 index,
                 &session.title,
                 format!(
-                    "{}{place}  {}",
+                    "{}{place}  {}{last}",
                     session.agent.name(),
                     ago(session.updated, time)
                 ),

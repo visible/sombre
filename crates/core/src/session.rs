@@ -75,6 +75,47 @@ pub fn named(raw: &str) -> Result<String, &'static str> {
     Ok(unquoted.to_string())
 }
 
+const TAIL: u64 = 256 * 1024;
+const DEEPEST: u64 = 16 * 1024 * 1024;
+
+pub fn tail(path: &Path, window: u64) -> (Vec<String>, bool) {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut file) = fs::File::open(path) else {
+        return (Vec::new(), true);
+    };
+    let size = file.metadata().map_or(0, |meta| meta.len());
+    let start = size.saturating_sub(window);
+    let mut bytes = Vec::new();
+    if file.seek(SeekFrom::Start(start)).is_err() || file.read_to_end(&mut bytes).is_err() {
+        return (Vec::new(), true);
+    }
+    let lines = String::from_utf8_lossy(&bytes)
+        .lines()
+        .skip(usize::from(start > 0))
+        .map(str::to_string)
+        .collect();
+    (lines, start == 0)
+}
+
+pub fn latest(session: &Session) -> Option<String> {
+    let asked = match session.agent {
+        Agent::Claude => crate::claude::asked,
+        Agent::Codex => crate::codex::asked,
+        Agent::Sombre => crate::sombre::asked,
+    };
+    let mut window = TAIL;
+    loop {
+        let (lines, whole) = tail(&session.path, window);
+        if let Some(found) = lines.iter().rev().find_map(|line| asked(line)) {
+            return Some(found);
+        }
+        if whole || window >= DEEPEST {
+            return None;
+        }
+        window *= 4;
+    }
+}
+
 pub fn title(text: &str) -> Option<String> {
     let clean = crate::scrub::scrub(text)
         .split_whitespace()
@@ -145,6 +186,80 @@ fn resolve(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn chat(agent: Agent, path: &Path) -> Session {
+        Session {
+            agent,
+            cwd: PathBuf::from("/work"),
+            id: "s1".to_string(),
+            path: path.to_path_buf(),
+            title: "first prompt".to_string(),
+            updated: 0,
+        }
+    }
+
+    #[test]
+    fn the_latest_prompt_comes_from_the_end_of_each_agents_file() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let claude = dir.path().join("claude.jsonl");
+        let padding = format!(
+            "{{\"type\":\"assistant\",\"message\":{{\"content\":[{{\"type\":\"text\",\"text\":\"{}\"}}]}}}}\n",
+            "x".repeat(4000)
+        );
+        let mut text = String::from(
+            "{\"type\":\"user\",\"cwd\":\"/work\",\"message\":{\"content\":\"first prompt\"}}\n",
+        );
+        for _ in 0..80 {
+            text.push_str(&padding);
+        }
+        text.push_str("{\"type\":\"user\",\"message\":{\"content\":\"now add the tests\"}}\n");
+        text.push_str("{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"content\":\"ok\"}]}}\n");
+        for _ in 0..80 {
+            text.push_str(&padding);
+        }
+        fs::write(&claude, text).unwrap_or_else(|error| panic!("{error}"));
+        assert!(fs::metadata(&claude).map(|meta| meta.len()).unwrap_or(0) > TAIL);
+        assert_eq!(
+            latest(&chat(Agent::Claude, &claude)).as_deref(),
+            Some("now add the tests")
+        );
+        let codex = dir.path().join("codex.jsonl");
+        fs::write(
+            &codex,
+            concat!(
+                r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"first prompt"}]}}"#,
+                "\n",
+                r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>"}]}}"#,
+                "\n",
+                r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"ship it"}]}}"#,
+                "\n",
+                r#"{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}}"#,
+                "\n"
+            ),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(
+            latest(&chat(Agent::Codex, &codex)).as_deref(),
+            Some("ship it")
+        );
+        let own = dir.path().join("sombre.jsonl");
+        fs::write(
+            &own,
+            concat!(
+                r#"{"type":"message","message":{"role":"user","content":"first prompt"}}"#,
+                "\n",
+                r#"{"type":"message","message":{"role":"user","content":"rename the button"}}"#,
+                "\n",
+                r#"{"type":"message","message":{"role":"assistant","content":"renamed"}}"#,
+                "\n"
+            ),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(
+            latest(&chat(Agent::Sombre, &own)).as_deref(),
+            Some("rename the button")
+        );
+    }
 
     fn session(agent: Agent, id: &str) -> Session {
         Session {

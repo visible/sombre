@@ -171,6 +171,10 @@ fn command(value: &Value) -> String {
     }
 }
 
+pub fn asked(line: &str) -> Option<String> {
+    first(line)
+}
+
 fn first(line: &str) -> Option<String> {
     let entry: Value = serde_json::from_str(line).ok()?;
     let payload = &entry["payload"];

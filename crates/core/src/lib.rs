@@ -16,7 +16,7 @@ use std::env;
 use std::path::PathBuf;
 
 pub use event::Event;
-pub use session::{Agent, Lookup, Model, Session, ago, find, here, named, now};
+pub use session::{Agent, Lookup, Model, Session, ago, find, here, latest, named, now};
 
 #[derive(Clone, Debug)]
 pub struct Roots {

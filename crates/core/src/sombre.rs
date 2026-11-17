@@ -71,6 +71,15 @@ pub fn records(path: &Path) -> Vec<Record> {
         .collect()
 }
 
+pub fn asked(line: &str) -> Option<String> {
+    match serde_json::from_str::<Record>(line).ok()? {
+        Record::Message { message, .. } if message["role"] == "user" => {
+            message["content"].as_str().and_then(title)
+        }
+        _ => None,
+    }
+}
+
 pub fn read(path: &Path) -> Option<Session> {
     let updated = seconds(fs::metadata(path).ok()?.modified().ok()?);
     let all = records(path);

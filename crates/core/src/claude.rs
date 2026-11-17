@@ -117,6 +117,16 @@ pub fn model(root: &Path) -> Option<String> {
 
 const COMPACTED: &str = "compacted here. earlier messages were summarized to make room";
 
+pub fn asked(line: &str) -> Option<String> {
+    if !line.contains("\"user\"") {
+        return None;
+    }
+    let entry: Value = serde_json::from_str(line).ok()?;
+    typed(&entry)
+        .then(|| prompt(&entry["message"]["content"]).and_then(title))
+        .flatten()
+}
+
 fn typed(entry: &Value) -> bool {
     entry["type"] == "user"
         && !entry["isMeta"].as_bool().unwrap_or(false)
