@@ -46,6 +46,10 @@ jobs:
       contents: write
       id-token: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
@@ -56,4 +60,6 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" sombre-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+        run: |
+          sh scripts/notes.sh "$TAG" > notes.md
+          gh release create "$TAG" sombre-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$TAG" --notes-file notes.md
