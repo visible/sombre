@@ -1,5 +1,7 @@
 name: ci
 on: [push, pull_request]
+permissions:
+  contents: read
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -11,11 +13,14 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca
+        with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y bubblewrap libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - run: cargo fmt --check
