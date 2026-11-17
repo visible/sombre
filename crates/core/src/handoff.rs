@@ -175,12 +175,21 @@ fn archive(roots: &Roots, copy: &Copy, codex: Shelf) -> Result<(), String> {
 fn restore(roots: &Roots, copy: &Copy, codex: Shelf) -> Result<PathBuf, String> {
     match copy.agent {
         Agent::Codex => {
+            let live = roots.codex.join("sessions");
+            if let Some(path) =
+                codex::find(&roots.codex, &copy.session).filter(|path| path.starts_with(&live))
+            {
+                return Ok(path);
+            }
             codex(false, &copy.session)?;
             codex::find(&roots.codex, &copy.session)
                 .ok_or_else(|| "codex unarchived the chat but sombre couldn't find it".to_string())
         }
         agent => {
             let kept = shelf(roots, agent, &copy.session);
+            if !kept.is_file() && copy.home.is_file() {
+                return Ok(copy.home.clone());
+            }
             if !kept.is_file() {
                 return Err(format!("the archived {} copy is missing", agent.name()));
             }
@@ -303,6 +312,7 @@ pub fn hand(
         return Err("there's nothing in this chat to move yet".to_string());
     }
     thread.copies[position].home = source;
+    thread.copies[position].base = items.len();
     let target = thread.copies.iter().position(|copy| copy.agent == to);
     let (session, path, carried) = match target {
         Some(index) => {
@@ -326,9 +336,6 @@ pub fn hand(
             (session, path, carried)
         }
     };
-    archive(roots, &thread.copies[position], codex)?;
-    thread.copies[position].archived = true;
-    thread.copies[position].synced = thread.log.len();
     let length = timeline(to, &path).len();
     if let Some(copy) = thread.copies.iter_mut().find(|copy| copy.agent == to) {
         copy.archived = false;
@@ -336,6 +343,10 @@ pub fn hand(
         copy.home = path.clone();
         copy.synced = thread.log.len();
     }
+    save(roots, &thread)?;
+    archive(roots, &thread.copies[position], codex)?;
+    thread.copies[position].archived = true;
+    thread.copies[position].synced = thread.log.len();
     save(roots, &thread)?;
     Ok(Moved {
         carried,
@@ -513,6 +524,118 @@ mod tests {
             sombre::read(&moved.path).map(|session| session.title),
             Some("remember cobalt".to_string())
         );
+    }
+
+    fn moved(roots: &Roots, cwd: &Path) -> Moved {
+        let claude = start(roots, cwd);
+        let there = hand(
+            roots,
+            Agent::Claude,
+            &claude,
+            Agent::Codex,
+            cwd,
+            &versions(),
+            &fake(roots),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        let later = [
+            Turn::User("now add tests".to_string()),
+            Turn::Agent("added three tests".to_string()),
+        ];
+        append(
+            &there.path,
+            &codex::lines(&later, &there.session, cwd, "0.167.0", false, true),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        there
+    }
+
+    fn stuck(roots: &Roots) -> impl Fn(bool, &str) -> Result<(), String> + '_ {
+        let working = fake(roots);
+        move |away: bool, id: &str| {
+            if away {
+                Err("codex archive failed".to_string())
+            } else {
+                working(away, id)
+            }
+        }
+    }
+
+    #[test]
+    fn a_handoff_that_fails_to_archive_can_be_retried_without_duplicates() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let roots = roots(dir.path());
+        let cwd = Path::new("/work/atlas");
+        let there = moved(&roots, cwd);
+        let failed = hand(
+            &roots,
+            Agent::Codex,
+            &there.session,
+            Agent::Claude,
+            cwd,
+            &versions(),
+            &stuck(&roots),
+        );
+        assert!(failed.is_err());
+        let back = hand(
+            &roots,
+            Agent::Codex,
+            &there.session,
+            Agent::Claude,
+            cwd,
+            &versions(),
+            &fake(&roots),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(claude::timeline(&back.path).len(), 4);
+        assert!(
+            codex::find(&roots.codex, &there.session)
+                .is_some_and(|path| path.starts_with(roots.codex.join("archived_sessions")))
+        );
+        let thread = load(&roots, Agent::Claude, &back.session)
+            .unwrap_or_else(|| panic!("the thread should be saved"));
+        assert_eq!(thread.log.len(), 4);
+    }
+
+    #[test]
+    fn a_first_handoff_that_fails_late_does_not_make_a_second_chat() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let roots = roots(dir.path());
+        let cwd = Path::new("/work/atlas");
+        let there = moved(&roots, cwd);
+        let failed = hand(
+            &roots,
+            Agent::Codex,
+            &there.session,
+            Agent::Sombre,
+            cwd,
+            &versions(),
+            &stuck(&roots),
+        );
+        assert!(failed.is_err());
+        let own = hand(
+            &roots,
+            Agent::Codex,
+            &there.session,
+            Agent::Sombre,
+            cwd,
+            &versions(),
+            &fake(&roots),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        let thread = load(&roots, Agent::Sombre, &own.session)
+            .unwrap_or_else(|| panic!("the thread should be saved"));
+        let copies = thread
+            .copies
+            .iter()
+            .filter(|copy| copy.agent == Agent::Sombre)
+            .count();
+        assert_eq!(copies, 1);
+        assert_eq!(sombre::timeline(&own.path).len(), 4);
+        let made = fs::read_dir(sombre::folder(&roots.sombre))
+            .map(|entries| entries.count())
+            .unwrap_or_default();
+        assert_eq!(made, 1);
     }
 
     #[test]
