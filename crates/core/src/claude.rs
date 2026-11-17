@@ -85,6 +85,14 @@ pub fn transcript(path: &Path) -> Vec<Event> {
             );
         } else if entry["subtype"] == "compact_boundary" {
             events.push(Event::Note(COMPACTED.to_string()));
+        } else if entry["isApiErrorMessage"] == true {
+            let text = entry["message"]["content"][0]["text"]
+                .as_str()
+                .unwrap_or("the turn failed");
+            events.push(Event::Failed(event::explain(
+                text,
+                entry["apiErrorCode"].as_str(),
+            )));
         } else if entry["type"] == "assistant" {
             events.extend(event::blocks(&entry["message"]["content"]));
             if let Some(model) = entry["message"]["model"]
@@ -596,6 +604,28 @@ mod tests {
         );
         assert_eq!(model(dir.path()), Some("opus".to_string()));
         assert_eq!(model(&dir.path().join("missing")), None);
+    }
+
+    #[test]
+    fn reopened_chats_show_api_errors_as_failures() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let path = write(
+            dir.path(),
+            "e.jsonl",
+            &[
+                r#"{"type":"user","cwd":"/w","message":{"role":"user","content":"use the new model"}}"#,
+                r#"{"type":"assistant","isApiErrorMessage":true,"error":"unknown","apiErrorStatus":400,"apiErrorType":"invalid_request_error","apiErrorCode":"model_not_available","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"API Error: 400 That model isn't available."}]}}"#,
+            ],
+        );
+        assert_eq!(
+            transcript(&path),
+            vec![
+                Event::Prompt("use the new model".to_string()),
+                Event::Failed(
+                    "That model isn't available. Pick another model to keep going.".to_string()
+                ),
+            ]
+        );
     }
 
     #[test]

@@ -271,7 +271,7 @@ pub fn claude(line: &str) -> Vec<Event> {
     }
 }
 
-fn explain(text: &str, code: Option<&str>) -> String {
+pub(crate) fn explain(text: &str, code: Option<&str>) -> String {
     let plain = text.strip_prefix("API Error: ").map_or(text, |rest| {
         rest.trim_start_matches(|character: char| character.is_ascii_digit())
             .trim_start()
