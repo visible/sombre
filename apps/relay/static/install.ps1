@@ -26,11 +26,18 @@
     Expand-Archive -Path (Join-Path $temp $archive) -DestinationPath $temp -Force
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
     Move-Item -Force -Path (Join-Path $temp 'sombre.exe') -Destination (Join-Path $folder 'sombre.exe')
-    $path = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ((($path -split ';') | Where-Object { $_ }) -notcontains $folder) {
-      [Environment]::SetEnvironmentVariable('Path', ((@($path, $folder) | Where-Object { $_ }) -join ';'), 'User')
-      $env:Path = "$env:Path;$folder"
-      Write-Host "added $folder to your PATH. open a new terminal to use sombre everywhere"
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+    try {
+      $path = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+      if ((($path -split ';') | Where-Object { $_ }) -notcontains $folder) {
+        $key.SetValue('Path', ((@($path, $folder) | Where-Object { $_ }) -join ';'), [Microsoft.Win32.RegistryValueKind]::ExpandString)
+        [Environment]::SetEnvironmentVariable('SOMBRE_PATH', '1', 'User')
+        [Environment]::SetEnvironmentVariable('SOMBRE_PATH', $null, 'User')
+        $env:Path = "$env:Path;$folder"
+        Write-Host "added $folder to your PATH. open a new terminal to use sombre everywhere"
+      }
+    } finally {
+      $key.Close()
     }
     Write-Host "installed $(& (Join-Path $folder 'sombre.exe') --version) to $folder"
     Write-Host 'run sombre in a project folder to start'
