@@ -312,6 +312,10 @@ impl Dock {
         crate::pane::draw(&lines, None);
     }
 
+    pub fn stale(&mut self) {
+        self.drawn = Instant::now() - Duration::from_secs(1);
+    }
+
     pub fn relabel(&mut self, footer: Vec<String>) {
         self.footer = footer;
         self.drawn = Instant::now() - Duration::from_secs(1);

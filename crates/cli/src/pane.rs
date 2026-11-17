@@ -96,6 +96,10 @@ pub fn pinned() -> bool {
     STATE.lock().is_ok_and(|state| state.on)
 }
 
+pub fn inside() -> bool {
+    STATE.lock().is_ok_and(|state| state.on && state.inside)
+}
+
 pub fn following() -> bool {
     STATE
         .lock()

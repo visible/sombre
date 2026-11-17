@@ -446,10 +446,14 @@ pub fn frame(lines: &[String]) -> String {
         *held = lines[end.saturating_sub(HELD)..end].to_vec();
     }
     let start = end.saturating_sub(ROWS);
-    format!(
-        "\u{1b}[?2026h{}\u{1b}[H\u{1b}[2J\u{1b}[3J{}\u{1b}[?2026l\n",
-        crate::pane::reset(),
+    let shown = if crate::pane::inside() {
+        String::new()
+    } else {
         lines[start..end].join("\n")
+    };
+    format!(
+        "\u{1b}[?2026h{}\u{1b}[H\u{1b}[2J\u{1b}[3J{shown}\u{1b}[?2026l\n",
+        crate::pane::reset(),
     )
 }
 

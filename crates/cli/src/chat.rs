@@ -1803,6 +1803,7 @@ fn pump(
             dock.hide();
             print!("{}", view::replay(Some(prose)));
             streak.show(&engine.cwd);
+            dock.stale();
             dock.draw();
         }
         let events = match engine.next(Duration::from_millis(10)) {
