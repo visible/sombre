@@ -20,7 +20,19 @@ irm https://sombre.si/install.ps1 | iex
 EOF
 
 if [ -z "$previous" ]; then
-  printf '## new\n\n- the first release: run claude code, codex, or sombre'"'"'s own agent in any folder, and /pair a phone to keep going when you step away\n\n'
+  cat <<'EOF'
+## new
+
+- one cli for claude code, codex, and sombre's own agent. `sombre resume` picks up any chat from any of them
+- hand a chat to another agent partway through, with its history carried over
+- `/pair` a phone through sombre.si, sealed end to end so the relay can't read a word. follow along, answer approvals, and send messages from the phone
+- three permission levels, ask, auto, and yolo, switched with shift tab
+- `/goal` keeps an agent working toward one outcome, `/compact` shrinks long chats, and `/model` sets the model and reasoning effort. cost and context left show after every turn
+- `/device` keeps the computer awake, and running with the lid closed
+- `!command` runs a shell command in the chat's folder and hands the output to the agent
+- builds for macos, linux, and windows
+
+EOF
 else
   added="$(list feat)"
   fixed="$(list fix)"
