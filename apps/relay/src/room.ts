@@ -32,11 +32,11 @@ const TOKENS = 16;
 const BODY = 6 * 1024 * 1024;
 
 export const GONE =
-  "this chat isn't paired anymore. run /pair on your mac for a new link";
+  "this chat isn't paired anymore. pair again on your computer for a new link";
 const UNPAIRED =
-  "this phone isn't paired anymore. run /pair on your mac for a new link";
+  "this phone isn't paired anymore. pair again on your computer for a new link";
 const USED =
-  "this pairing link was already used. run /pair on your mac for a new one";
+  "this pairing link was already used. pair again on your computer for a new one";
 
 const text = (body: string, status = 200) =>
   new Response(body, {

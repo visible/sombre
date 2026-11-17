@@ -475,7 +475,7 @@ impl Hub {
         };
         let Some(room) = rooms.get_mut(id) else {
             return missing(
-                "this chat isn't paired anymore. run /pair on your computer for a new link",
+                "this chat isn't paired anymore. pair again on your computer for a new link",
             );
         };
         room.touched = Instant::now();
@@ -500,7 +500,7 @@ impl Hub {
                         ok("text/plain", fresh)
                     }
                     None => refuse(
-                        "this pairing link was already used. run /pair on your computer for a new one",
+                        "this pairing link was already used. pair again on your computer for a new one",
                     ),
                 }
             }
@@ -516,7 +516,7 @@ impl Hub {
                         .is_some_and(|device| room.devices.iter().any(|known| known.id == device))
                 };
                 return rooms.get(&key).filter(still).map_or_else(
-                    || refuse("this phone isn't paired anymore. run /pair on your computer for a new link"),
+                    || refuse("this phone isn't paired anymore. pair again on your computer for a new link"),
                     |room| {
                         let (items, next) = since(&room.out, room.outbase, after);
                         ok(
@@ -591,9 +591,9 @@ impl Hub {
                 rooms.remove(id);
                 ok("text/plain", "ok".to_string())
             }
-            _ => {
-                refuse("this phone isn't paired anymore. run /pair on your computer for a new link")
-            }
+            _ => refuse(
+                "this phone isn't paired anymore. pair again on your computer for a new link",
+            ),
         };
         drop(rooms);
         self.changed.notify_all();
@@ -808,7 +808,8 @@ pub fn tailnet() -> Option<Node> {
     crate::tailscale::find()
 }
 
-const OFFLINE: &str = "tailscale isn't connected on this computer. turn it on and run /pair again, or pick home network in /pair";
+const OFFLINE: &str =
+    "tailscale isn't connected on this computer. turn it on and try again, or pick home network";
 
 fn live() -> Option<Arc<Session>> {
     LIVE.lock().ok()?.clone()
@@ -1068,13 +1069,11 @@ fn made(base: &str, name: &str, own: bool) -> Result<Remote, String> {
         .send("")
         .map_err(|error| match error {
             ureq::Error::StatusCode(429) => {
-                "too many new pairings from this network. wait a few minutes and try /pair again"
+                "too many new pairings from this network. wait a few minutes and try again"
                     .to_string()
             }
             ureq::Error::StatusCode(403) => format!("{name} doesn't take new pairings"),
-            _ => format!(
-                "couldn't reach {name}. check your connection, or pick home network in /pair"
-            ),
+            _ => format!("couldn't reach {name}. check your connection, or pick home network"),
         })?
         .body_mut()
         .read_to_string()

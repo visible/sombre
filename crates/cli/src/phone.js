@@ -828,7 +828,10 @@ const start = () => {
   const saved = recall("key");
   if (!saved) {
     mood("off", "not paired");
-    empty("not paired", "run /pair on your computer, then scan the code");
+    empty(
+      "not paired",
+      "pair a phone from sombre on your computer, then scan the code"
+    );
     return;
   }
   let key = unbase(saved);
@@ -1337,7 +1340,7 @@ const start = () => {
     outbox.length = 0;
     mood("off", "disconnected");
     form.hidden = true;
-    empty(title, "run /pair on your computer for a new link");
+    empty(title, "pair again on your computer for a new link");
   };
   const received = (body) => {
     state.tries = 0;
