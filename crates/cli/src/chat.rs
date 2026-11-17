@@ -775,6 +775,9 @@ fn device(roots: &Roots) {
                     Lid::Sleeps if cfg!(target_os = "macos") => {
                         "keeps running with the lid shut. asks for your password once. keep it plugged in"
                     }
+                    Lid::Sleeps if cfg!(windows) => {
+                        "keeps running with the lid shut. asks for administrator approval once. keep it plugged in"
+                    }
                     Lid::Sleeps => {
                         "keeps running with the lid shut while sombre is open. keep it plugged in"
                     }
@@ -784,7 +787,7 @@ fn device(roots: &Roots) {
                     Lid::Stuck => {
                         "lid sleep is still off from an earlier run. tab turns it back on"
                     }
-                    Lid::Missing => "only on mac and linux for now",
+                    Lid::Missing => "this computer has no lid setting sombre can change",
                 },
             ),
             (
@@ -840,6 +843,10 @@ fn device(roots: &Roots) {
                         if cfg!(target_os = "macos") {
                             println!(
                                 "  sombre needs your mac password to keep it running with the lid closed"
+                            );
+                        } else if cfg!(windows) {
+                            println!(
+                                "  sombre needs administrator approval to keep it running with the lid closed"
                             );
                         }
                         power::hold(&mark)
