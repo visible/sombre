@@ -20,6 +20,7 @@ use tauri::ipc::Channel;
 use crate::feed::{Task, relative};
 
 const IDLE: Duration = Duration::from_millis(100);
+const RESTING: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Aim {
@@ -356,6 +357,7 @@ struct Runner {
     clearing: bool,
     goal: Option<Goal>,
     halt: Arc<AtomicBool>,
+    working: Arc<AtomicBool>,
     before: Option<String>,
 }
 
@@ -519,7 +521,9 @@ impl Runner {
             .and_then(|(roots, session)| {
                 let sessions = sombre_core::scan(&roots);
                 match sombre_core::find(&sessions, session) {
-                    sombre_core::Lookup::Found(found) => Some(sombre_core::transcript(found)),
+                    sombre_core::Lookup::Found(found) => {
+                        Some(crate::feed::transcript(found).as_ref().clone())
+                    }
                     _ => None,
                 }
             })
@@ -1045,7 +1049,7 @@ impl Runner {
                     Err(TryRecvError::Disconnected) => break,
                 }
             } else {
-                match asks.recv_timeout(IDLE) {
+                match asks.recv_timeout(if self.followed() { IDLE } else { RESTING }) {
                     Ok(ask) => Some(ask),
                     Err(RecvTimeoutError::Timeout) => None,
                     Err(RecvTimeoutError::Disconnected) => break,
@@ -1074,6 +1078,7 @@ impl Runner {
             if self.busy {
                 self.pump();
             }
+            self.working.store(self.busy, Ordering::Relaxed);
         }
     }
 }
@@ -1082,6 +1087,7 @@ struct Handle {
     sender: Sender<Ask>,
     thread: JoinHandle<()>,
     halt: Arc<AtomicBool>,
+    working: Arc<AtomicBool>,
     cwd: PathBuf,
 }
 
@@ -1111,6 +1117,7 @@ impl Live {
             .map_err(|_| "sombre lost track of its chats")?;
         let (sender, receiver) = mpsc::channel();
         let halt = Arc::new(AtomicBool::new(false));
+        let working = Arc::new(AtomicBool::new(false));
         let cwd = engine.cwd.clone();
         let runner = Runner {
             key: key.to_string(),
@@ -1123,6 +1130,7 @@ impl Live {
             before: None,
             goal: None,
             halt: Arc::clone(&halt),
+            working: Arc::clone(&working),
             out: channel,
             started: Instant::now(),
             waiting: HashMap::new(),
@@ -1135,11 +1143,19 @@ impl Live {
                 halt,
                 sender,
                 thread,
+                working,
             },
         ) {
             let _ = old.sender.send(Ask::Close);
         }
         Ok(())
+    }
+
+    pub fn working(&self) -> bool {
+        self.0.lock().is_ok_and(|held| {
+            held.values()
+                .any(|handle| handle.working.load(Ordering::Relaxed))
+        })
     }
 
     pub fn remove(&self, key: &str) {

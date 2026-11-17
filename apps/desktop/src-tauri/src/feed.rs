@@ -1,7 +1,32 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use serde::Serialize;
 use sombre_core::{Agent, Event, Session};
+
+type Parsed = (PathBuf, Option<(u64, SystemTime)>, Arc<Vec<Event>>);
+
+static PARSED: Mutex<Option<Parsed>> = Mutex::new(None);
+
+pub fn transcript(session: &Session) -> Arc<Vec<Event>> {
+    let stamp = std::fs::metadata(&session.path)
+        .ok()
+        .and_then(|meta| Some((meta.len(), meta.modified().ok()?)));
+    let Ok(mut parsed) = PARSED.lock() else {
+        return Arc::new(sombre_core::transcript(session));
+    };
+    if let Some((path, seen, events)) = parsed.as_ref()
+        && *path == session.path
+        && stamp.is_some()
+        && *seen == stamp
+    {
+        return Arc::clone(events);
+    }
+    let events = Arc::new(sombre_core::transcript(session));
+    *parsed = Some((session.path.clone(), stamp, Arc::clone(&events)));
+    events
+}
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Chat {
@@ -201,9 +226,32 @@ pub fn story(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::io::Write;
 
     use super::*;
+
+    #[test]
+    fn a_chat_opened_twice_is_parsed_once_until_its_file_changes() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let path = dir.path().join("chat.jsonl");
+        std::fs::write(&path, "").unwrap_or_else(|error| panic!("{error}"));
+        let session = Session {
+            agent: Agent::Claude,
+            id: "chat".to_string(),
+            title: String::new(),
+            cwd: dir.path().to_path_buf(),
+            updated: 0,
+            path: path.clone(),
+        };
+        let first = transcript(&session);
+        assert!(Arc::ptr_eq(&first, &transcript(&session)));
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .and_then(|mut file| file.write_all(b"\n"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(!Arc::ptr_eq(&first, &transcript(&session)));
+    }
 
     fn step(id: &str, label: &str, detail: &str) -> Event {
         Event::Step {

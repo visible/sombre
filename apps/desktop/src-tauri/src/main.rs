@@ -9,6 +9,7 @@ mod term;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 
 use serde::{Deserialize, Serialize};
@@ -94,7 +95,7 @@ async fn chat(
     let roots = roots()?;
     blocking(move || {
         feed::story(
-            sombre_core::transcript(&session),
+            feed::transcript(&session).as_ref().clone(),
             &session.cwd,
             sombre_core::ledger::read(&roots, agent, &id),
         )
@@ -166,7 +167,7 @@ fn resumed(session: &Session) -> Result<Engine, String> {
         ));
     }
     let roots = Roots::detect();
-    let history = sombre_core::transcript(session);
+    let history = feed::transcript(session);
     let chosen = recorded(&history);
     let mut engine = Engine::new(session.agent, session.cwd.clone(), Some(session.id.clone()));
     engine.model = chosen
@@ -355,7 +356,7 @@ fn configure(
         Ok(())
     })?;
     if let Some(awake) = awake {
-        sombre_harness::power::awake(awake);
+        AWAKE.store(awake, Ordering::Relaxed);
     }
     Ok(saved)
 }
@@ -801,6 +802,18 @@ fn adopt() {
     }
 }
 
+static AWAKE: AtomicBool = AtomicBool::new(false);
+
+fn guard(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        loop {
+            let needed = app.state::<Live>().working() || sombre_pair::paired();
+            sombre_harness::power::awake(AWAKE.load(Ordering::Relaxed) && needed);
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+    });
+}
+
 fn main() {
     adopt();
     sombre_pair::named("desktop-pair.json");
@@ -808,7 +821,10 @@ fn main() {
         let _ = sombre_pair::resume();
     });
     if let Some(roots) = Roots::detect() {
-        sombre_harness::power::awake(!Config::load(&roots.sombre).unwrap_or_default().sleep);
+        AWAKE.store(
+            !Config::load(&roots.sombre).unwrap_or_default().sleep,
+            Ordering::Relaxed,
+        );
     }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -871,12 +887,15 @@ fn main() {
         ])
         .build(tauri::generate_context!());
     match app {
-        Ok(app) => app.run(|handle, event| {
-            if let RunEvent::Exit = event {
-                handle.state::<Live>().close();
-                handle.state::<term::Terms>().close();
-            }
-        }),
+        Ok(app) => {
+            guard(app.handle().clone());
+            app.run(|handle, event| {
+                if let RunEvent::Exit = event {
+                    handle.state::<Live>().close();
+                    handle.state::<term::Terms>().close();
+                }
+            });
+        }
         Err(error) => {
             eprintln!("sombre couldn't open its window: {error}");
             std::process::exit(1);
