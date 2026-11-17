@@ -7,7 +7,7 @@ pub mod shell;
 
 use std::ffi::OsString;
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -539,6 +539,10 @@ impl Engine {
             args.push("--resume".to_string());
             args.push(session.clone());
         }
+        if sombre_core::claude::untrusted(&self.cwd) {
+            args.push("--setting-sources".to_string());
+            args.push("user".to_string());
+        }
         ("claude", args)
     }
 
@@ -694,16 +698,21 @@ fn walls(mode: Mode) -> Value {
     }
 }
 
-pub fn covers(mode: Mode, item: &Event) -> bool {
-    let Event::Approval { tool, .. } = item else {
+pub fn covers(mode: Mode, item: &Event, cwd: &Path) -> bool {
+    let Event::Approval { tool, input, .. } = item else {
         return false;
     };
     match mode {
         Mode::Ask => false,
-        Mode::Auto => matches!(
-            tool.as_str(),
-            "Edit" | "Write" | "MultiEdit" | "NotebookEdit"
-        ),
+        Mode::Auto => {
+            matches!(
+                tool.as_str(),
+                "Edit" | "Write" | "MultiEdit" | "NotebookEdit"
+            ) && ["file_path", "notebook_path", "path"]
+                .iter()
+                .find_map(|key| input[*key].as_str())
+                .is_some_and(|path| sombre_harness::tools::inside(cwd, path))
+        }
         Mode::Yolo => true,
     }
 }
@@ -826,13 +835,13 @@ mod tests {
         assert_eq!(claude(Mode::Yolo), "bypassPermissions");
     }
 
-    fn asking(tool: &str) -> Event {
+    fn asking(tool: &str, input: Value) -> Event {
         Event::Approval {
             always: None,
             change: Vec::new(),
             detail: String::new(),
             id: "r1".to_string(),
-            input: Value::Null,
+            input,
             reason: String::new(),
             rules: Value::Null,
             tool: tool.to_string(),
@@ -841,19 +850,31 @@ mod tests {
 
     #[test]
     fn a_new_mode_answers_the_approvals_it_would_not_have_asked() {
-        assert!(!covers(Mode::Ask, &asking("Edit")));
-        assert!(covers(Mode::Auto, &asking("Edit")));
-        assert!(covers(Mode::Auto, &asking("Write")));
-        assert!(!covers(Mode::Auto, &asking("Bash")));
-        assert!(covers(Mode::Yolo, &asking("Bash")));
-        assert!(!covers(Mode::Yolo, &Event::Echo));
+        let project = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let cwd = project.path();
+        let within = json!({"file_path": cwd.join("src/main.rs").display().to_string()});
+        let home = json!({"file_path": "/Users/someone/.zshenv"});
+        let climbing = json!({"path": "../../.ssh/config"});
+        assert!(!covers(Mode::Ask, &asking("Edit", within.clone()), cwd));
+        assert!(covers(Mode::Auto, &asking("Edit", within.clone()), cwd));
+        assert!(covers(
+            Mode::Auto,
+            &asking("Write", json!({"path": "notes.md"})),
+            cwd
+        ));
+        assert!(!covers(Mode::Auto, &asking("Write", home), cwd));
+        assert!(!covers(Mode::Auto, &asking("Edit", climbing), cwd));
+        assert!(!covers(Mode::Auto, &asking("Edit", json!(7)), cwd));
+        assert!(!covers(Mode::Auto, &asking("Bash", within), cwd));
+        assert!(covers(Mode::Yolo, &asking("Bash", Value::Null), cwd));
+        assert!(!covers(Mode::Yolo, &Event::Echo, cwd));
         let questions = Event::Questions {
             id: "q1".to_string(),
             input: Value::Null,
             questions: Vec::new(),
         };
-        assert!(!covers(Mode::Yolo, &questions));
-        assert!(!covers(Mode::Auto, &questions));
+        assert!(!covers(Mode::Yolo, &questions, cwd));
+        assert!(!covers(Mode::Auto, &questions, cwd));
     }
 
     #[test]

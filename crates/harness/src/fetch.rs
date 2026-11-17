@@ -20,6 +20,7 @@ pub fn get(input: &Value) -> Result<String, String> {
         .ok_or_else(|| "url must start with https:// or http://".to_string())?;
     let agent: Agent = Agent::config_builder()
         .http_status_as_error(false)
+        .max_redirects(0)
         .timeout_global(Some(Duration::from_secs(20)))
         .build()
         .into();
@@ -29,6 +30,16 @@ pub fn get(input: &Value) -> Result<String, String> {
         .call()
         .map_err(|error| format!("couldn't fetch {url}: {error}"))?;
     let status = response.status().as_u16();
+    if (300..400).contains(&status) {
+        let target = response
+            .headers()
+            .get("location")
+            .and_then(|place| place.to_str().ok())
+            .unwrap_or_default();
+        return Ok(format!(
+            "{url} redirects to {target}. fetch that address if it's the page you need"
+        ));
+    }
     let html = response
         .headers()
         .get("content-type")

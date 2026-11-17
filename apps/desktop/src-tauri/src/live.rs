@@ -641,7 +641,13 @@ impl Runner {
                 label: "Test".to_string(),
                 step: step.clone(),
             });
-            match shell::run(&command, &self.engine.cwd, &self.halt, |_| {}) {
+            match shell::run(
+                &command,
+                &self.engine.cwd,
+                &self.halt,
+                self.engine.mode != Mode::Yolo,
+                |_| {},
+            ) {
                 Ok(ran) if ran.stopped => return Check::Stopped,
                 Ok(ran) if ran.code == Some(0) => self.emit(Update::Output {
                     failed: false,
@@ -770,7 +776,7 @@ impl Runner {
         let covered: Vec<String> = self
             .waiting
             .iter()
-            .filter(|(_, item)| covers(self.engine.mode, item))
+            .filter(|(_, item)| covers(self.engine.mode, item, &self.engine.cwd))
             .map(|(id, _)| id.clone())
             .collect();
         for id in covered {
@@ -883,7 +889,7 @@ impl Runner {
                 if let (Some(item), Update::Ask { id, .. } | Update::Questions { id, .. }) =
                     (approval, &update)
                 {
-                    let covered = covers(self.engine.mode, &item);
+                    let covered = covers(self.engine.mode, &item, &self.engine.cwd);
                     self.waiting.insert(id.clone(), item);
                     if covered {
                         self.answer(id, Answer::Yes);
@@ -1235,7 +1241,7 @@ mod tests {
             input: serde_json::Value::Null,
             questions: asked.clone(),
         };
-        assert!(!covers(Mode::Yolo, &item));
+        assert!(!covers(Mode::Yolo, &item, Path::new("/work")));
         assert_eq!(
             gate.pass(item),
             Pass::Ask(Update::Questions {

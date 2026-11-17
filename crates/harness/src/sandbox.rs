@@ -9,16 +9,29 @@ use std::process::Stdio;
 use std::sync::OnceLock;
 
 #[cfg(any(target_os = "macos", target_os = "linux", test))]
-const CACHES: [&str; 8] = [
+const CACHES: [&str; 9] = [
     ".cache",
     "Library/Caches",
-    ".bun",
-    ".npm",
-    ".cargo",
-    ".rustup",
-    ".local/share",
-    ".config",
+    ".npm/_cacache",
+    ".bun/install/cache",
+    ".cargo/registry",
+    ".cargo/git",
+    ".cargo/.package-cache",
+    ".cargo/.package-cache-mutate",
+    ".cargo/.global-cache",
 ];
+
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+const GUARDED: [&str; 5] = [
+    ".git/config",
+    ".git/config.worktree",
+    ".git/hooks",
+    ".claude",
+    ".codex",
+];
+
+#[cfg(any(target_os = "macos", test))]
+const LAUNCHERS: [&str; 3] = ["/bin/launchctl", "/usr/bin/open", "/usr/bin/osascript"];
 
 #[cfg(any(target_os = "macos", test))]
 pub fn profile(cwd: &Path) -> String {
@@ -30,12 +43,27 @@ pub fn profile(cwd: &Path) -> String {
     if let Some(home) = crate::process::home() {
         places.extend(CACHES.iter().map(|cache| home.join(cache)));
     }
-    let allowed: String = places
-        .iter()
-        .map(|place| format!(" (subpath \"{}\")", quote(&place.display().to_string())))
-        .collect();
+    let listed = |paths: &[PathBuf], kind: &str| -> String {
+        paths
+            .iter()
+            .map(|place| format!(" ({kind} \"{}\")", quote(&place.display().to_string())))
+            .collect()
+    };
+    let allowed = listed(&places, "subpath");
+    let root = real(cwd);
+    let guarded = listed(
+        &GUARDED
+            .iter()
+            .map(|place| root.join(place))
+            .collect::<Vec<_>>(),
+        "subpath",
+    );
+    let launchers = listed(
+        &LAUNCHERS.iter().map(PathBuf::from).collect::<Vec<_>>(),
+        "literal",
+    );
     format!(
-        "(version 1)(allow default)(deny file-write*)(allow file-write*{allowed} (regex #\"^/dev/\"))"
+        "(version 1)(allow default)(deny file-write*)(allow file-write*{allowed} (regex #\"^/dev/\"))(deny file-write*{guarded})(deny process-exec{launchers})"
     )
 }
 
@@ -110,18 +138,31 @@ pub fn binds(cwd: &Path, home: Option<&Path>) -> Vec<OsString> {
     let mut writable: Vec<PathBuf> = home
         .map(|home| CACHES.iter().map(|cache| home.join(cache)).collect())
         .unwrap_or_default();
-    writable.push(real(cwd));
-    for place in writable {
+    let root = real(cwd);
+    writable.push(root.clone());
+    let mount = |args: &mut Vec<OsString>, flag: &str, place: PathBuf| {
         args.extend([
-            OsString::from("--bind-try"),
+            OsString::from(flag),
             place.clone().into_os_string(),
             place.into_os_string(),
         ]);
+    };
+    for place in writable {
+        mount(&mut args, "--bind-try", place);
+    }
+    for place in GUARDED {
+        mount(&mut args, "--ro-bind-try", root.join(place));
     }
     args.extend(
-        ["--unshare-pid", "--new-session", "--die-with-parent"]
-            .iter()
-            .map(OsString::from),
+        [
+            "--tmpfs",
+            "/run/user",
+            "--unshare-pid",
+            "--new-session",
+            "--die-with-parent",
+        ]
+        .iter()
+        .map(OsString::from),
     );
     args
 }
@@ -154,6 +195,35 @@ mod tests {
             quote(&real(dir.path()).display().to_string())
         )));
         assert!(text.contains("(subpath \"/private/tmp\")"));
+        let root = real(dir.path()).display().to_string();
+        assert!(text.contains(&format!(
+            "(deny file-write* (subpath \"{}/.git/config\")",
+            quote(&root)
+        )));
+        assert!(text.contains("(deny process-exec (literal \"/bin/launchctl\")"));
+        assert!(!text.contains(".bun\")") && !text.contains(".config\")"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_mac_sandbox_keeps_git_config_and_launchers_out_of_reach() {
+        let project = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        fs::create_dir_all(project.path().join(".git/hooks"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        let root = real(project.path()).display().to_string();
+        let script = format!(
+            "echo a > '{root}/kept'; echo b >> '{root}/.git/config'; echo c > '{root}/.git/hooks/pre-commit'; /bin/launchctl print system >/dev/null 2>&1 && touch '{root}/launched'; true"
+        );
+        let mut inner = Command::new("/bin/sh");
+        inner.arg("-c").arg(script);
+        let ran = wrap(project.path(), &inner)
+            .and_then(|mut launch| launch.status().ok())
+            .is_some_and(|status| status.success());
+        assert!(ran);
+        assert!(project.path().join("kept").exists());
+        assert!(!project.path().join(".git/config").exists());
+        assert!(!project.path().join(".git/hooks/pre-commit").exists());
+        assert!(!project.path().join("launched").exists());
     }
 
     #[test]
@@ -183,6 +253,17 @@ mod tests {
             })
         };
         assert!(opened("/tmp"));
+        assert!(
+            args.windows(3)
+                .any(|window| window[0] == "--ro-bind-try" && window[1].ends_with(".git/config"))
+        );
+        assert!(
+            args.windows(2)
+                .any(|window| window[0] == "--tmpfs" && window[1] == "/run/user")
+        );
+        assert!(!opened(
+            &Path::new("/home/me").join(".bun").to_string_lossy()
+        ));
         assert!(opened("/work/app"));
         assert!(opened(
             &Path::new("/home/me").join(".cache").to_string_lossy()

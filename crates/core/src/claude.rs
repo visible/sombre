@@ -236,6 +236,37 @@ pub fn find(root: &Path, id: &str) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+pub fn trusted(config: &str, cwd: &Path) -> bool {
+    let Ok(value) = serde_json::from_str::<Value>(config) else {
+        return false;
+    };
+    let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    [cwd, real.as_path()].iter().any(|start| {
+        start.ancestors().any(|place| {
+            value["projects"][place.to_string_lossy().as_ref()]["hasTrustDialogAccepted"] == true
+        })
+    })
+}
+
+pub fn configured(cwd: &Path) -> bool {
+    [".claude/settings.json", ".claude/settings.local.json"]
+        .iter()
+        .any(|file| cwd.join(file).is_file())
+}
+
+pub fn trust() -> Option<PathBuf> {
+    std::env::var_os("CLAUDE_CONFIG_DIR")
+        .map(|folder| PathBuf::from(folder).join(".claude.json"))
+        .or_else(|| std::env::home_dir().map(|home| home.join(".claude.json")))
+}
+
+pub fn untrusted(cwd: &Path) -> bool {
+    configured(cwd)
+        && !trust()
+            .and_then(|file| fs::read_to_string(file).ok())
+            .is_some_and(|config| trusted(&config, cwd))
+}
+
 pub fn folder(root: &Path, cwd: &Path) -> PathBuf {
     let encoded: String = cwd
         .display()
@@ -352,6 +383,27 @@ pub fn publish(path: &Path) -> std::io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_folder_is_trusted_when_it_or_a_parent_was_trusted_in_claude() {
+        let config = r#"{"projects":{"/work":{"hasTrustDialogAccepted":true},"/other":{"hasTrustDialogAccepted":false}}}"#;
+        assert!(trusted(config, Path::new("/work")));
+        assert!(trusted(config, Path::new("/work/app/src")));
+        assert!(!trusted(config, Path::new("/other/app")));
+        assert!(!trusted(config, Path::new("/elsewhere")));
+        assert!(!trusted("not json", Path::new("/work")));
+    }
+
+    #[test]
+    fn only_folders_with_claude_settings_need_trust() {
+        let project = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        assert!(!configured(project.path()));
+        fs::create_dir_all(project.path().join(".claude"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        fs::write(project.path().join(".claude/settings.json"), "{}")
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(configured(project.path()));
+    }
 
     #[test]
     fn reads_the_cost_claude_carries_over_on_resume() {

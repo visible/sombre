@@ -178,9 +178,14 @@ pub fn describe(tool: &str, input: &Value) -> String {
             .unwrap_or_default()
             .lines()
             .filter_map(|line| {
-                ["*** Add File: ", "*** Update File: ", "*** Delete File: "]
-                    .iter()
-                    .find_map(|head| line.strip_prefix(head))
+                [
+                    "*** Add File: ",
+                    "*** Update File: ",
+                    "*** Delete File: ",
+                    "*** Move to: ",
+                ]
+                .iter()
+                .find_map(|head| line.strip_prefix(head))
             })
             .map(str::trim)
             .collect::<Vec<_>>()

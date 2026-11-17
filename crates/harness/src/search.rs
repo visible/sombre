@@ -83,12 +83,12 @@ pub fn glob(input: &Value, cwd: &Path) -> Result<String, String> {
         .as_str()
         .filter(|pattern| !pattern.is_empty())
         .ok_or_else(|| "pattern is missing".to_string())?;
-    let place = input["path"].as_str().unwrap_or(".");
+    let place = crate::tools::resolve(cwd, input["path"].as_str().unwrap_or("."));
     if found("rg") {
         let mut command = Command::new("rg");
         command
-            .args(["--files", "--color", "never", "--glob", pattern])
-            .arg(place)
+            .args(["--files", "--color", "never", "--glob", pattern, "--"])
+            .arg(&place)
             .current_dir(cwd);
         return run(&mut command);
     }
@@ -97,7 +97,7 @@ pub fn glob(input: &Value, cwd: &Path) -> Result<String, String> {
     }
     let mut command = Command::new("find");
     command
-        .arg(place)
+        .arg(&place)
         .args([
             "-not",
             "-path",
@@ -161,6 +161,18 @@ pub fn list(folder: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_path_cannot_turn_into_a_find_action() {
+        let project = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let kept = project.path().join("keep.rs");
+        fs::write(&kept, "fn main() {}").unwrap_or_else(|error| panic!("{error}"));
+        let _ = glob(
+            &serde_json::json!({"pattern": "*.rs", "path": "-delete"}),
+            project.path(),
+        );
+        assert!(kept.exists());
+    }
     use serde_json::json;
 
     fn project() -> tempfile::TempDir {

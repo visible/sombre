@@ -10,7 +10,7 @@ mod prompt;
 pub mod provider;
 mod run;
 mod salvage;
-mod sandbox;
+pub mod sandbox;
 mod search;
 pub mod skills;
 pub mod tools;

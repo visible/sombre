@@ -16,6 +16,23 @@ pub fn group(command: &mut Command) -> &mut Command {
     command
 }
 
+pub fn detach(command: &mut Command) -> &mut Command {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            command.pre_exec(|| {
+                nix::unistd::setsid()
+                    .map(|_| ())
+                    .map_err(std::io::Error::from)
+            });
+        }
+        command
+    }
+    #[cfg(not(unix))]
+    group(command)
+}
+
 pub fn interrupt(pid: u32) {
     signal(pid, false);
 }
@@ -254,6 +271,24 @@ pub fn hung() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_detached_command_runs_in_its_own_session() {
+        use nix::unistd::{Pid, getsid};
+        let mut command = Command::new("sleep");
+        command.arg("2");
+        let mut child = detach(&mut command)
+            .spawn()
+            .unwrap_or_else(|error| panic!("{error}"));
+        let pid = Pid::from_raw(i32::try_from(child.id()).unwrap_or_default());
+        let theirs = getsid(Some(pid)).unwrap_or_else(|error| panic!("{error}"));
+        let ours = getsid(None).unwrap_or_else(|error| panic!("{error}"));
+        let _ = child.kill();
+        let _ = child.wait();
+        assert_eq!(theirs, pid);
+        assert_ne!(theirs, ours);
+    }
 
     #[test]
     fn reads_the_login_environment_after_the_mark() {

@@ -150,6 +150,11 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
     let mut composer = crate::compose::Composer::default();
     resumed(&mut engine, history, roots.as_ref());
     screen(&engine, history);
+    if engine.agent == Agent::Claude && sombre_core::claude::untrusted(&engine.cwd) {
+        view::note(
+            "this folder's .claude settings and hooks stay off until you open it in claude once and trust it",
+        );
+    }
     match crate::relay::resume() {
         Ok(true) => {
             for item in shared(&engine) {
@@ -604,7 +609,7 @@ pub fn pick<'a>(sessions: &'a [Session], cwd: &Path, all: bool) -> Option<&'a Se
 fn command_line(command: &str, cwd: &Path, stop: &AtomicBool) -> Option<String> {
     view::line("");
     view::step("Run", command, cwd);
-    let ran = shell::run(command, cwd, stop, |line| {
+    let ran = shell::run(command, cwd, stop, false, |line| {
         view::line(&format!("    {line}"));
     });
     match ran {
@@ -641,11 +646,16 @@ fn show(current: Option<&Goal>) {
     ]);
 }
 
-fn verify(objective: &str, cwd: &Path, stop: &AtomicBool) -> Option<(String, String)> {
+fn verify(
+    objective: &str,
+    cwd: &Path,
+    stop: &AtomicBool,
+    fenced: bool,
+) -> Option<(String, String)> {
     for command in goal::checks(objective) {
         view::line("");
         view::step("Test", &command, cwd);
-        match shell::run(&command, cwd, stop, |_| {}) {
+        match shell::run(&command, cwd, stop, fenced, |_| {}) {
             Ok(ran) if ran.code == Some(0) && !ran.stopped => {
                 let shown = if ran.output.trim().is_empty() {
                     "passed"
@@ -693,7 +703,8 @@ fn chase(engine: &mut Engine, current: &mut Goal, stop: &AtomicBool, first: bool
         current.turns += engine.rounds();
         let objective = current.objective.clone();
         current.native(&outcome, || {
-            verify(&objective, &engine.cwd, stop).map(|(command, _)| command)
+            verify(&objective, &engine.cwd, stop, engine.mode != Mode::Yolo)
+                .map(|(command, _)| command)
         });
         view::note(&progress(current, outcome.stopped));
         return left;
@@ -709,7 +720,12 @@ fn chase(engine: &mut Engine, current: &mut Goal, stop: &AtomicBool, first: bool
         current.turns += 1;
         current.judge(&outcome);
         if current.status == goal::Status::Complete
-            && let Some((command, output)) = verify(&current.objective, &engine.cwd, stop)
+            && let Some((command, output)) = verify(
+                &current.objective,
+                &engine.cwd,
+                stop,
+                engine.mode != Mode::Yolo,
+            )
         {
             current.status = goal::Status::Active;
             prompt = goal::retry(&command, &output, &current.objective);
@@ -1804,7 +1820,7 @@ fn pump(
                 continue;
             }
             Next::Error(line) => {
-                errors.push(line);
+                errors.push(sombre_core::scrub::scrub(&line));
                 continue;
             }
             Next::Closed => {
@@ -1919,7 +1935,7 @@ fn pump(
                     if long(started) {
                         view::notify(&format!("{} needs your approval", engine.name()));
                     }
-                    let choice = if covers(engine.mode, &item) {
+                    let choice = if covers(engine.mode, &item, &engine.cwd) {
                         approve::granted(engine.mode.name());
                         Choice::Yes
                     } else {
