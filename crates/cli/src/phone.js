@@ -1,5 +1,4 @@
 const SIGMA = [0x61_70_78_65, 0x33_20_64_6e, 0x79_62_2d_32, 0x6b_20_65_74];
-const MASK = 0x0f_ff_ff_fc_0f_ff_ff_fc_0f_ff_ff_fc_0f_ff_ff_ffn;
 const PRIME = (1n << 130n) - 5n;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -16,24 +15,29 @@ const words = (bytes, count) => {
   );
 };
 
-export const block = (key, counter, nonce) => {
-  const state = new Uint32Array([
-    ...SIGMA,
-    ...words(key, 8),
-    counter,
-    ...words(nonce, 3),
-  ]);
-  const mixed = [...state];
-  const quarter = (a, b, c, d) => {
-    mixed[a] += mixed[b];
-    mixed[d] = rotate(mixed[d] ^ mixed[a], 16);
-    mixed[c] += mixed[d];
-    mixed[b] = rotate(mixed[b] ^ mixed[c], 12);
-    mixed[a] += mixed[b];
-    mixed[d] = rotate(mixed[d] ^ mixed[a], 8);
-    mixed[c] += mixed[d];
-    mixed[b] = rotate(mixed[b] ^ mixed[c], 7);
-  };
+const chacha = new Uint32Array(16);
+const mixed = new Uint32Array(16);
+
+const quarter = (a, b, c, d) => {
+  mixed[a] += mixed[b];
+  mixed[d] = rotate(mixed[d] ^ mixed[a], 16);
+  mixed[c] += mixed[d];
+  mixed[b] = rotate(mixed[b] ^ mixed[c], 12);
+  mixed[a] += mixed[b];
+  mixed[d] = rotate(mixed[d] ^ mixed[a], 8);
+  mixed[c] += mixed[d];
+  mixed[b] = rotate(mixed[b] ^ mixed[c], 7);
+};
+
+const prime = (key, counter, nonce) => {
+  chacha.set(SIGMA);
+  chacha.set(words(key, 8), 4);
+  chacha[12] = counter;
+  chacha.set(words(nonce, 3), 13);
+};
+
+const cycle = () => {
+  mixed.set(chacha);
   for (let round = 0; round < 10; round += 1) {
     quarter(0, 4, 8, 12);
     quarter(1, 5, 9, 13);
@@ -44,42 +48,117 @@ export const block = (key, counter, nonce) => {
     quarter(2, 7, 8, 13);
     quarter(3, 4, 9, 14);
   }
+  for (let index = 0; index < 16; index += 1) {
+    mixed[index] += chacha[index];
+  }
+};
+
+export const block = (key, counter, nonce) => {
+  prime(key, counter, nonce);
+  cycle();
   const out = new Uint8Array(64);
   const view = new DataView(out.buffer);
   for (let index = 0; index < 16; index += 1) {
-    view.setUint32(index * 4, (mixed[index] + state[index]) >>> 0, true);
+    view.setUint32(index * 4, mixed[index], true);
   }
   return out;
 };
 
 const stream = (key, nonce, data) => {
   const out = new Uint8Array(data.length);
+  prime(key, 1, nonce);
   for (let offset = 0; offset < data.length; offset += 64) {
-    const pad = block(key, offset / 64 + 1, nonce);
-    for (
-      let index = 0;
-      index < 64 && offset + index < data.length;
-      index += 1
-    ) {
-      out[offset + index] = data[offset + index] ^ pad[index];
+    cycle();
+    const end = Math.min(64, data.length - offset);
+    for (let index = 0; index < end; index += 1) {
+      const pad = (mixed[index >> 2] >>> ((index & 3) * 8)) & 0xff;
+      out[offset + index] = data[offset + index] ^ pad;
     }
+    chacha[12] += 1;
   }
   return out;
 };
 
-const little = (bytes) =>
-  bytes.reduceRight((total, byte) => (total << 8n) | BigInt(byte), 0n);
+const LIMB = 0x1f_ff;
+const SPAN = 8192;
+
+const spread = (bytes, at, into, top) => {
+  const pair = (index) =>
+    bytes[at + index * 2] | (bytes[at + index * 2 + 1] << 8);
+  const t0 = pair(0);
+  const t1 = pair(1);
+  const t2 = pair(2);
+  const t3 = pair(3);
+  const t4 = pair(4);
+  const t5 = pair(5);
+  const t6 = pair(6);
+  const t7 = pair(7);
+  into[0] += t0 & LIMB;
+  into[1] += ((t0 >>> 13) | (t1 << 3)) & LIMB;
+  into[2] += ((t1 >>> 10) | (t2 << 6)) & LIMB;
+  into[3] += ((t2 >>> 7) | (t3 << 9)) & LIMB;
+  into[4] += ((t3 >>> 4) | (t4 << 12)) & LIMB;
+  into[5] += (t4 >>> 1) & LIMB;
+  into[6] += ((t4 >>> 14) | (t5 << 2)) & LIMB;
+  into[7] += ((t5 >>> 11) | (t6 << 5)) & LIMB;
+  into[8] += ((t6 >>> 8) | (t7 << 8)) & LIMB;
+  into[9] += (t7 >>> 5) | top;
+};
+
+const times = (h, r, next) => {
+  let carry = 0;
+  for (let index = 0; index < 10; index += 1) {
+    let sum = carry;
+    for (let other = 0; other < 10; other += 1) {
+      sum +=
+        h[other] *
+        (other <= index ? r[index - other] : 5 * r[index + 10 - other]);
+    }
+    carry = Math.floor(sum / SPAN);
+    next[index] = sum & LIMB;
+  }
+  next[0] += carry * 5;
+  carry = Math.floor(next[0] / SPAN);
+  next[0] &= LIMB;
+  next[1] += carry;
+  h.set(next);
+};
+
+const little = (bytes) => {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, 16);
+  return view.getBigUint64(0, true) | (view.getBigUint64(8, true) << 64n);
+};
 
 const poly = (key, message) => {
-  const r = little(key.slice(0, 16)) & MASK;
-  const s = little(key.slice(16, 32));
-  let total = 0n;
-  for (let offset = 0; offset < message.length; offset += 16) {
-    const chunk = message.slice(offset, offset + 16);
-    const value = little(chunk) + (1n << BigInt(8 * chunk.length));
-    total = ((total + value) * r) % PRIME;
+  const clamped = key.slice(0, 16);
+  for (const index of [3, 7, 11, 15]) {
+    clamped[index] &= 15;
   }
-  total = (total + s) & ((1n << 128n) - 1n);
+  for (const index of [4, 8, 12]) {
+    clamped[index] &= 252;
+  }
+  const r = new Float64Array(10);
+  spread(clamped, 0, r, 0);
+  const h = new Float64Array(10);
+  const next = new Float64Array(10);
+  const last = new Uint8Array(16);
+  const whole = message.length - (message.length % 16);
+  for (let offset = 0; offset < whole; offset += 16) {
+    spread(message, offset, h, 1 << 11);
+    times(h, r, next);
+  }
+  if (whole < message.length) {
+    last.set(message.subarray(whole));
+    last[message.length - whole] = 1;
+    spread(last, 0, h, 0);
+    times(h, r, next);
+  }
+  let total = 0n;
+  for (let index = 9; index >= 0; index -= 1) {
+    total = total * 8192n + BigInt(h[index]);
+  }
+  total =
+    ((total % PRIME) + little(key.subarray(16, 32))) & ((1n << 128n) - 1n);
   return Uint8Array.from({ length: 16 }, (_, index) =>
     Number((total >> BigInt(8 * index)) & 0xffn)
   );
@@ -88,29 +167,29 @@ const poly = (key, message) => {
 const padded = (length) => (16 - (length % 16)) % 16;
 
 const tag = (key, nonce, aad, sealed) => {
-  const length = new Uint8Array(16);
-  const view = new DataView(length.buffer);
+  const head = aad.length + padded(aad.length);
+  const body = sealed.length + padded(sealed.length);
+  const message = new Uint8Array(head + body + 16);
+  message.set(aad);
+  message.set(sealed, head);
+  const view = new DataView(message.buffer, head + body);
   view.setBigUint64(0, BigInt(aad.length), true);
   view.setBigUint64(8, BigInt(sealed.length), true);
-  const message = new Uint8Array([
-    ...aad,
-    ...new Uint8Array(padded(aad.length)),
-    ...sealed,
-    ...new Uint8Array(padded(sealed.length)),
-    ...length,
-  ]);
-  return poly(block(key, 0, nonce).slice(0, 32), message);
+  return poly(block(key, 0, nonce).subarray(0, 32), message);
 };
 
 export const encrypt = (key, nonce, aad, plain) => {
   const sealed = stream(key, nonce, plain);
-  return new Uint8Array([...sealed, ...tag(key, nonce, aad, sealed)]);
+  const framed = new Uint8Array(sealed.length + 16);
+  framed.set(sealed);
+  framed.set(tag(key, nonce, aad, sealed), sealed.length);
+  return framed;
 };
 
 export const decrypt = (key, nonce, aad, framed) => {
-  const sealed = framed.slice(0, -16);
+  const sealed = framed.subarray(0, -16);
   const expected = tag(key, nonce, aad, sealed);
-  const given = framed.slice(-16);
+  const given = framed.subarray(-16);
   let difference = 0;
   for (let index = 0; index < 16; index += 1) {
     difference |= expected[index] ^ given[index];
@@ -119,14 +198,22 @@ export const decrypt = (key, nonce, aad, framed) => {
 };
 
 export const unbase = (text) => {
+  if (Uint8Array.fromBase64) {
+    return Uint8Array.fromBase64(text, { alphabet: "base64url" });
+  }
   const plain = text.replaceAll("-", "+").replaceAll("_", "/");
-  return Uint8Array.from(
-    atob(plain + "=".repeat(padded(plain.length * 4) / 4)),
-    (character) => character.codePointAt(0)
-  );
+  const binary = atob(plain + "=".repeat(padded(plain.length * 4) / 4));
+  const out = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    out[index] = binary.codePointAt(index) ?? 0;
+  }
+  return out;
 };
 
 export const encode = (bytes) => {
+  if (bytes.toBase64) {
+    return bytes.toBase64();
+  }
   let text = "";
   for (let start = 0; start < bytes.length; start += 0x80_00) {
     text += String.fromCodePoint(...bytes.subarray(start, start + 0x80_00));

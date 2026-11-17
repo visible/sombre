@@ -43,6 +43,37 @@ describe("chacha20-poly1305 on the phone", () => {
     ).toBe(new TextDecoder().decode(plain));
   });
 
+  test("matches openssl at every block edge", () => {
+    const key = Uint8Array.from({ length: 32 }, (_, index) => index);
+    const nonce = Uint8Array.from({ length: 12 }, (_, index) => 0x40 + index);
+    const aad = new TextEncoder().encode("sombre computer");
+    const vectors: [number, string, string][] = [
+      [0, "28c5542d80627fa79e056fb05286ee48", ""],
+      [1, "b607b7e2b6351436dcceb619d53f2d9c", "ff"],
+      [15, "a90bcbdf177a457e3d7c530993ed8ba3", "ff7239e5f1e82fe1"],
+      [16, "f0c34fc87f471b1ab867a229ec1605ec", "ff7239e5f1e82fe1"],
+      [17, "f9443faa414cc1f63679232ac5fb0d55", "ff7239e5f1e82fe1"],
+      [63, "d38f0544c1550e981ae7feacf35a1c0f", "ff7239e5f1e82fe1"],
+      [64, "33fa102c049e95a7d9e1c957bf5ff2af", "ff7239e5f1e82fe1"],
+      [65, "135fd927bd237cba6d59bbba8948c03f", "ff7239e5f1e82fe1"],
+      [127, "6ce400586c11f85e3c4c57f71e645f1f", "ff7239e5f1e82fe1"],
+      [128, "101d62d1dd603471210bed9707649a85", "ff7239e5f1e82fe1"],
+      [129, "54a28e01b94b0f782879a3ac070a725a", "ff7239e5f1e82fe1"],
+      [1000, "88e5d421ac3bacdbda1a386339bc3950", "ff7239e5f1e82fe1"],
+      [4096, "b1507ea4053172fddbb68da7cbaff820", "ff7239e5f1e82fe1"],
+    ];
+    for (const [length, expected, start] of vectors) {
+      const plain = Uint8Array.from(
+        { length },
+        (_, index) => (index * 31 + 7) % 256
+      );
+      const sealed = encrypt(key, nonce, aad, plain);
+      expect(hex(sealed.subarray(-16))).toBe(expected);
+      expect(hex(sealed.subarray(0, Math.min(8, length)))).toBe(start);
+      expect(decrypt(key, nonce, aad, sealed)).toEqual(plain);
+    }
+  });
+
   test("seals messages only the same key can open", () => {
     const key = crypto.getRandomValues(new Uint8Array(32));
     const sealed = seal(key, { kind: "answer", yes: true });
