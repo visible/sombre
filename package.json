@@ -9,7 +9,7 @@
     "dev": "bun run --filter web dev",
     "build": "bun run --filter web build",
     "desktop": "bun run --filter desktop tauri dev",
-    "app": "bun run --filter desktop tauri build --bundles app",
+    "app": "bun run --filter desktop tauri build --bundles app && rm -rf /Applications/sombre.app && ditto target/release/bundle/macos/sombre.app /Applications/sombre.app",
     "cli": "cargo install --quiet --path crates/cli --root ~/.local",
     "phone": "SOMBRE_PHONE=crates/cli/src sombre resume",
     "mock": "bun scripts/mock.ts",
