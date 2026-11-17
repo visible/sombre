@@ -1,0 +1,27 @@
+name: install
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  install:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://sombre.si/install | sh
+          "$HOME/.local/bin/sombre" --version
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm https://sombre.si/install.ps1 | iex
+          & "$env:LOCALAPPDATA\sombre\bin\sombre.exe" --version
+          if (-not ([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' -contains "$env:LOCALAPPDATA\sombre\bin")) { throw 'the install folder is not on the user PATH' }
