@@ -1198,8 +1198,10 @@ impl Live {
     }
 }
 
+const REPLAYED: usize = 1_000;
+
 fn replayed(history: Vec<Event>) -> Vec<serde_json::Value> {
-    history
+    let shown: Vec<serde_json::Value> = history
         .into_iter()
         .flat_map(|event| match event.scrubbed() {
             Event::Prompt(text) => vec![json!({"kind": "user", "text": text})],
@@ -1213,7 +1215,9 @@ fn replayed(history: Vec<Event>) -> Vec<serde_json::Value> {
             item["again"] = json!(true);
             item
         })
-        .collect()
+        .collect();
+    let skip = shown.len().saturating_sub(REPLAYED);
+    shown.into_iter().skip(skip).collect()
 }
 
 #[cfg(test)]
@@ -1222,6 +1226,16 @@ mod tests {
 
     fn text(value: &str) -> Event {
         Event::Text(value.to_string())
+    }
+
+    #[test]
+    fn a_long_chat_replays_only_its_latest_entries() {
+        let history = (0..REPLAYED + 5)
+            .map(|count| text(&count.to_string()))
+            .collect();
+        let replay = replayed(history);
+        assert_eq!(replay.len(), REPLAYED);
+        assert_eq!(replay[0]["text"], "5");
     }
 
     #[test]
