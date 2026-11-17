@@ -39,6 +39,7 @@ static LIVE: AtomicUsize = AtomicUsize::new(0);
 static LINES: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static TEE: AtomicUsize = AtomicUsize::new(usize::MAX);
 static NARROW: AtomicUsize = AtomicUsize::new(0);
+static COLUMNS: AtomicUsize = AtomicUsize::new(0);
 const PHONE: usize = 44;
 const HELD: usize = 20_000;
 
@@ -463,6 +464,7 @@ pub fn transcript() -> Vec<String> {
 }
 
 fn rendered(live: Option<&Prose>) -> Vec<String> {
+    let _held = hold();
     let story = STORY.lock().map(|story| story.clone()).unwrap_or_default();
     let stepping = STEPPING.load(Ordering::Relaxed);
     if let Ok(mut sink) = SINK.lock() {
@@ -537,10 +539,31 @@ pub fn bold(text: &str) -> String {
 }
 
 pub fn width() -> usize {
-    match NARROW.load(Ordering::Relaxed) {
-        0 => terminal::size().map_or(80, |(columns, _)| usize::from(columns)),
-        narrow => narrow,
+    match (NARROW.load(Ordering::Relaxed), COLUMNS.load(Ordering::Relaxed)) {
+        (0, 0) => measured(),
+        (0, held) => held,
+        (narrow, _) => narrow,
     }
+}
+
+pub fn measured() -> usize {
+    terminal::size().map_or(80, |(columns, _)| usize::from(columns))
+}
+
+struct Hold(usize);
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        COLUMNS.store(self.0, Ordering::Relaxed);
+    }
+}
+
+fn hold() -> Hold {
+    let before = COLUMNS.load(Ordering::Relaxed);
+    if before == 0 {
+        COLUMNS.store(measured(), Ordering::Relaxed);
+    }
+    Hold(before)
 }
 
 fn breadth() -> usize {
@@ -771,6 +794,7 @@ pub fn banner(agent: &str, model: Option<&str>, mode: &str, cwd: &Path) {
 }
 
 pub fn history(items: &[Item], cwd: &Path) {
+    let _held = hold();
     let prompts: Vec<usize> = items
         .iter()
         .enumerate()
