@@ -218,12 +218,16 @@ pub fn chop(styled: &str, columns: usize) -> Vec<String> {
     rows
 }
 
-pub fn depth(columns: usize) -> usize {
+pub fn rows(want: usize, columns: usize) -> usize {
     LINES.lock().map_or(0, |lines| {
-        lines
-            .iter()
-            .map(|line| crate::dock::visible(line).div_ceil(columns.max(1)).max(1))
-            .sum()
+        let mut total = 0;
+        for line in lines.iter().rev() {
+            total += crate::dock::visible(line).div_ceil(columns.max(1)).max(1);
+            if total >= want {
+                break;
+            }
+        }
+        total
     })
 }
 
@@ -539,7 +543,10 @@ pub fn bold(text: &str) -> String {
 }
 
 pub fn width() -> usize {
-    match (NARROW.load(Ordering::Relaxed), COLUMNS.load(Ordering::Relaxed)) {
+    match (
+        NARROW.load(Ordering::Relaxed),
+        COLUMNS.load(Ordering::Relaxed),
+    ) {
         (0, 0) => measured(),
         (0, held) => held,
         (narrow, _) => narrow,

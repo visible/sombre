@@ -401,7 +401,8 @@ fn redraw(state: &mut State) {
 fn moved(state: &mut State, offset: usize) -> bool {
     let (columns, screen) = size();
     let room = usize::from(screen.saturating_sub(state.height).saturating_sub(1));
-    let offset = offset.min(view::depth(usize::from(columns)).saturating_sub(room));
+    let reached = view::rows(offset.saturating_add(room), usize::from(columns));
+    let offset = offset.min(reached.saturating_sub(room));
     if offset == state.offset && state.held.is_none() {
         return false;
     }
