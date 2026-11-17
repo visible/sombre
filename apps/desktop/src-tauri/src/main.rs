@@ -34,21 +34,21 @@ impl Known {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Folder {
     path: String,
     place: String,
     project: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Defaults {
     agent: Agent,
     mode: Mode,
     folders: Vec<Folder>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Model {
     id: String,
     about: String,
@@ -71,6 +71,7 @@ fn gone() -> String {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn chats(known: State<'_, Known>) -> Result<Vec<feed::Chat>, String> {
     let roots = roots()?;
     let sessions = blocking(move || sombre_core::scan(&roots)).await?;
@@ -86,6 +87,7 @@ async fn chats(known: State<'_, Known>) -> Result<Vec<feed::Chat>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn chat(
     known: State<'_, Known>,
     agent: Agent,
@@ -112,6 +114,7 @@ fn described(path: &Path, home: Option<&Path>) -> Folder {
 }
 
 #[tauri::command]
+#[specta::specta]
 fn folder(path: String) -> Result<Folder, String> {
     let path = PathBuf::from(path);
     if !path.is_dir() {
@@ -121,6 +124,7 @@ fn folder(path: String) -> Result<Folder, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 fn defaults(known: State<'_, Known>) -> Result<Defaults, String> {
     let roots = roots()?;
     let config = Config::load(&roots.sombre).unwrap_or_default();
@@ -147,6 +151,7 @@ fn defaults(known: State<'_, Known>) -> Result<Defaults, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn models(agent: Agent) -> Result<Vec<Model>, String> {
     let roots = roots()?;
     let (listed, _) = blocking(move || sombre_engine::catalog(&roots, agent)).await??;
@@ -208,7 +213,7 @@ fn fresh(
     Ok(engine)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, specta::Type)]
 struct Opening {
     key: String,
     agent: Agent,
@@ -220,6 +225,7 @@ struct Opening {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn start(
     known: State<'_, Known>,
     live: State<'_, Live>,
@@ -247,6 +253,7 @@ async fn start(
 }
 
 #[tauri::command]
+#[specta::specta]
 fn send(
     live: State<'_, Live>,
     key: String,
@@ -259,7 +266,7 @@ fn send(
     )
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Picture {
     path: String,
     src: String,
@@ -273,6 +280,7 @@ fn pictured(path: &Path) -> Result<Picture, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn keep(data: String) -> Result<Picture, String> {
     use base64::Engine as _;
     let roots = roots()?;
@@ -286,6 +294,7 @@ async fn keep(data: String) -> Result<Picture, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn picture(path: String) -> Result<Picture, String> {
     let roots = roots()?;
     blocking(move || {
@@ -298,6 +307,7 @@ async fn picture(path: String) -> Result<Picture, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn rename(live: State<'_, Live>, key: String, name: String) -> Result<String, String> {
     let name = sombre_core::named(&name)?;
     let (reply, answer) = mpsc::channel();
@@ -311,6 +321,7 @@ async fn rename(live: State<'_, Live>, key: String, name: String) -> Result<Stri
 }
 
 #[tauri::command]
+#[specta::specta]
 fn compact(live: State<'_, Live>, key: String) -> Result<(), String> {
     live.tell(&key, Ask::Compact)
 }
@@ -326,6 +337,7 @@ fn shown(config: &Config, roots: &Roots, folder: Option<&str>) -> settings::Sett
 }
 
 #[tauri::command]
+#[specta::specta]
 fn settings(folder: Option<String>) -> Result<settings::Settings, String> {
     let roots = roots()?;
     let config = Config::load(&roots.sombre)?;
@@ -346,6 +358,7 @@ fn edited(
 }
 
 #[tauri::command]
+#[specta::specta]
 fn configure(
     change: settings::Change,
     folder: Option<String>,
@@ -362,6 +375,7 @@ fn configure(
 }
 
 #[tauri::command]
+#[specta::specta]
 fn connect(
     name: String,
     url: String,
@@ -374,6 +388,7 @@ fn connect(
 }
 
 #[tauri::command]
+#[specta::specta]
 fn rekey(name: String, key: String, folder: Option<String>) -> Result<settings::Settings, String> {
     edited(folder.as_deref(), |config| {
         settings::rekey(config, &name, &key)
@@ -381,6 +396,7 @@ fn rekey(name: String, key: String, folder: Option<String>) -> Result<settings::
 }
 
 #[tauri::command]
+#[specta::specta]
 fn disconnect(name: String, folder: Option<String>) -> Result<settings::Settings, String> {
     edited(folder.as_deref(), |config| {
         config.remove(&name);
@@ -389,6 +405,7 @@ fn disconnect(name: String, folder: Option<String>) -> Result<settings::Settings
 }
 
 #[tauri::command]
+#[specta::specta]
 fn plug(name: String, run: String, folder: Option<String>) -> Result<settings::Settings, String> {
     edited(folder.as_deref(), |config| {
         settings::plug(config, &name, &run)
@@ -396,6 +413,7 @@ fn plug(name: String, run: String, folder: Option<String>) -> Result<settings::S
 }
 
 #[tauri::command]
+#[specta::specta]
 fn unplug(name: String, folder: Option<String>) -> Result<settings::Settings, String> {
     edited(folder.as_deref(), |config| {
         config.mcp.remove(&name);
@@ -404,6 +422,7 @@ fn unplug(name: String, folder: Option<String>) -> Result<settings::Settings, St
 }
 
 #[tauri::command]
+#[specta::specta]
 fn bring(name: String, folder: Option<String>) -> Result<settings::Settings, String> {
     edited(folder.as_deref(), |config| {
         settings::bring(config, &name, sombre_harness::mcp::foreign())
@@ -411,26 +430,30 @@ fn bring(name: String, folder: Option<String>) -> Result<settings::Settings, Str
 }
 
 #[tauri::command]
+#[specta::specta]
 fn goal(live: State<'_, Live>, key: String, text: String) -> Result<(), String> {
     live.tell(&key, Ask::Goal(text))
 }
 
 #[tauri::command]
+#[specta::specta]
 fn editors() -> Vec<editor::Editor> {
     editor::found()
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn launch(path: String, editor: Option<String>) -> Result<(), String> {
     blocking(move || editor::open(Path::new(&path), editor.as_deref())).await?
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn files(folder: String) -> Result<Vec<String>, String> {
     blocking(move || sombre_engine::files::list(Path::new(&folder))).await
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Installed {
     agent: Agent,
     version: Option<String>,
@@ -461,6 +484,7 @@ const fn setup(agent: Agent) -> (&'static str, &'static str) {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn agents() -> Result<Vec<Installed>, String> {
     blocking(|| {
         [Agent::Claude, Agent::Codex, Agent::Sombre]
@@ -484,6 +508,7 @@ async fn agents() -> Result<Vec<Installed>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 fn pty(
     terms: State<'_, term::Terms>,
     key: String,
@@ -496,21 +521,24 @@ fn pty(
 }
 
 #[tauri::command]
+#[specta::specta]
 fn input(terms: State<'_, term::Terms>, key: String, data: String) -> Result<(), String> {
     terms.write(&key, &data)
 }
 
 #[tauri::command]
+#[specta::specta]
 fn resize(terms: State<'_, term::Terms>, key: String, cols: u16, rows: u16) -> Result<(), String> {
     terms.resize(&key, cols, rows)
 }
 
 #[tauri::command]
+#[specta::specta]
 fn hangup(terms: State<'_, term::Terms>, key: String) {
     terms.hangup(&key);
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Repo {
     branch: Option<String>,
     upstream: Option<String>,
@@ -522,6 +550,7 @@ struct Repo {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn repo(folder: String) -> Result<Option<Repo>, String> {
     blocking(move || {
         sombre_engine::git::status(Path::new(&folder)).map(|found| Repo {
@@ -538,26 +567,30 @@ async fn repo(folder: String) -> Result<Option<Repo>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn commit(folder: String, message: String) -> Result<String, String> {
     blocking(move || sombre_engine::git::commit(Path::new(&folder), &message)).await?
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn push(folder: String) -> Result<String, String> {
     blocking(move || sombre_engine::git::push(Path::new(&folder))).await?
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn branch(folder: String, name: String) -> Result<String, String> {
     blocking(move || sombre_engine::git::branch(Path::new(&folder), &name)).await?
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn request(folder: String) -> Result<String, String> {
     blocking(move || sombre_engine::git::request(Path::new(&folder))).await?
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Diff {
     from: String,
     to: String,
@@ -566,6 +599,7 @@ struct Diff {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn changes(folder: String, from: Option<String>, to: Option<String>) -> Result<Diff, String> {
     blocking(move || {
         let path = PathBuf::from(folder);
@@ -587,11 +621,13 @@ async fn changes(folder: String, from: Option<String>, to: Option<String>) -> Re
 }
 
 #[tauri::command]
+#[specta::specta]
 fn record(agent: Agent, id: String, change: sombre_core::ledger::Record) -> Result<(), String> {
     sombre_core::ledger::append(&roots()?, agent, &id, &change)
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn purge(live: State<'_, Live>, folder: String) -> Result<usize, String> {
     let path = PathBuf::from(folder);
     live.clear(&path);
@@ -603,13 +639,14 @@ async fn purge(live: State<'_, Live>, folder: String) -> Result<usize, String> {
     .await?
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Carried {
     session: String,
     note: String,
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn carry(
     live: State<'_, Live>,
     key: String,
@@ -635,6 +672,7 @@ async fn carry(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn steer(live: State<'_, Live>, key: String, text: String) -> Result<bool, String> {
     let (reply, answer) = mpsc::channel();
     live.tell(&key, Ask::Steer(text, reply))?;
@@ -642,11 +680,13 @@ async fn steer(live: State<'_, Live>, key: String, text: String) -> Result<bool,
 }
 
 #[tauri::command]
+#[specta::specta]
 fn answer(live: State<'_, Live>, key: String, id: String, choice: Choice) -> Result<(), String> {
     live.tell(&key, Ask::Answer(id, choice.into()))
 }
 
 #[tauri::command]
+#[specta::specta]
 fn reply(
     live: State<'_, Live>,
     key: String,
@@ -656,7 +696,7 @@ fn reply(
     live.tell(&key, Ask::Reply(id, answers))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Paired {
     link: String,
     code: String,
@@ -664,7 +704,7 @@ struct Paired {
     home: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct Phone {
     id: String,
     label: String,
@@ -684,6 +724,7 @@ fn code(link: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn pair(live: State<'_, Live>, key: String, home: Option<bool>) -> Result<Paired, String> {
     let config = Roots::detect()
         .and_then(|roots| Config::load(&roots.sombre).ok())
@@ -720,6 +761,7 @@ async fn pair(live: State<'_, Live>, key: String, home: Option<bool>) -> Result<
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn phones() -> Result<Vec<Phone>, String> {
     blocking(|| {
         sombre_pair::devices()
@@ -735,6 +777,7 @@ async fn phones() -> Result<Vec<Phone>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn forget(live: State<'_, Live>, id: String) -> Result<bool, String> {
     let forgot = blocking(move || sombre_pair::forget(&id, &[])).await?;
     if let Some(key) = sombre_pair::followed().filter(|_| forgot) {
@@ -744,21 +787,25 @@ async fn forget(live: State<'_, Live>, id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn unpair() -> Result<bool, String> {
     blocking(sombre_pair::close).await
 }
 
 #[tauri::command]
+#[specta::specta]
 fn followed() -> Option<String> {
     sombre_pair::paired().then(sombre_pair::followed).flatten()
 }
 
 #[tauri::command]
+#[specta::specta]
 fn stop(live: State<'_, Live>, key: String) -> Result<(), String> {
     live.tell(&key, Ask::Stop)
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn tune(
     live: State<'_, Live>,
     key: String,
@@ -814,28 +861,11 @@ fn guard(app: tauri::AppHandle) {
     });
 }
 
-fn main() {
-    adopt();
-    sombre_pair::named("desktop-pair.json");
-    std::thread::spawn(|| {
-        let _ = sombre_pair::resume();
-    });
-    if let Some(roots) = Roots::detect() {
-        AWAKE.store(
-            !Config::load(&roots.sombre).unwrap_or_default().sleep,
-            Ordering::Relaxed,
-        );
-    }
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
-        .manage(Known::default())
-        .manage(Live::default())
-        .manage(term::Terms::default())
-        .on_page_load(|webview, payload| shot::script(webview, payload.event()))
-        .invoke_handler(tauri::generate_handler![
+fn bindings() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .dangerously_cast_bigints_to_number()
+        .disable_serde_phases()
+        .commands(tauri_specta::collect_commands![
             chats,
             chat,
             defaults,
@@ -885,6 +915,31 @@ fn main() {
             hangup,
             shot::shot
         ])
+}
+
+fn main() {
+    adopt();
+    sombre_pair::named("desktop-pair.json");
+    std::thread::spawn(|| {
+        let _ = sombre_pair::resume();
+    });
+    if let Some(roots) = Roots::detect() {
+        AWAKE.store(
+            !Config::load(&roots.sombre).unwrap_or_default().sleep,
+            Ordering::Relaxed,
+        );
+    }
+    let commands = bindings();
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .manage(Known::default())
+        .manage(Live::default())
+        .manage(term::Terms::default())
+        .on_page_load(|webview, payload| shot::script(webview, payload.event()))
+        .invoke_handler(commands.invoke_handler())
         .build(tauri::generate_context!());
     match app {
         Ok(app) => {
@@ -900,5 +955,31 @@ fn main() {
             eprintln!("sombre couldn't open its window: {error}");
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_typescript_bindings_match_the_commands() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/bindings.ts");
+        let before = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
+        super::bindings()
+            .export(specta_typescript::Typescript::default().header(""), &path)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let after: String = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .lines()
+            .filter(|line| !line.starts_with("//") && !line.starts_with("/*"))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        std::fs::write(&path, after.trim_start()).unwrap_or_else(|error| panic!("{error}"));
+        let after = std::fs::read_to_string(&path).unwrap_or_default();
+        assert!(
+            before == after,
+            "the typescript bindings were out of date and are rewritten now, commit apps/desktop/src/lib/bindings.ts"
+        );
     }
 }

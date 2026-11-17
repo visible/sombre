@@ -8,6 +8,10 @@ publish.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+specta = { workspace = true, optional = true }
+
+[features]
+specta = ["dep:specta"]
 
 [dev-dependencies]
 tempfile.workspace = true

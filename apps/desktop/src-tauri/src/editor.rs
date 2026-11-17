@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 
 use serde::Serialize;
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, specta::Type)]
 pub struct Editor {
     pub id: String,
     pub name: String,

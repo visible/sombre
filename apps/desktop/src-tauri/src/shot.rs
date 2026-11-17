@@ -47,6 +47,7 @@ mod mac {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn shot(window: WebviewWindow, name: String) -> Result<String, String> {
     let folder = std::env::temp_dir().join("sombre-shots");
     std::fs::create_dir_all(&folder).map_err(|error| error.to_string())?;

@@ -22,7 +22,7 @@ use crate::feed::{Task, relative};
 const IDLE: Duration = Duration::from_millis(100);
 const RESTING: Duration = Duration::from_secs(1);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 pub struct Aim {
     pub objective: String,
     pub status: String,
@@ -41,14 +41,14 @@ impl From<&Goal> for Aim {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 pub struct Changed {
     pub path: String,
     pub added: Option<u32>,
     pub removed: Option<u32>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Update {
     State {
@@ -130,7 +130,7 @@ pub enum Update {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum Choice {
     Yes,

@@ -57,6 +57,7 @@ pub enum Event {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Question {
     pub header: String,
     pub text: String,
@@ -65,6 +66,7 @@ pub struct Question {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type), serde(rename = "Option"))]
 pub struct Choice {
     pub label: String,
     pub about: String,

@@ -6,7 +6,7 @@ import react from "ultracite/oxlint/react";
 export default defineConfig({
   env: core.env,
   extends: [core, react, next],
-  ignorePatterns: core.ignorePatterns,
+  ignorePatterns: [...core.ignorePatterns, "apps/desktop/src/lib/bindings.ts"],
   overrides: [
     {
       files: ["crates/cli/src/phone.js"],

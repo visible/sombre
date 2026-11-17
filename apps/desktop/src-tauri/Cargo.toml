@@ -12,13 +12,16 @@ tauri-build = { version = "2", features = [] }
 base64 = "0.23.1"
 portable-pty = "0.9.0"
 serde.workspace = true
-sombre-core.workspace = true
+sombre-core = { workspace = true, features = ["specta"] }
 sombre-engine.workspace = true
-sombre-harness.workspace = true
+sombre-harness = { workspace = true, features = ["specta"] }
 sombre-pair.workspace = true
 serde_json.workspace = true
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
-tauri = { version = "2", features = [] }
+specta.workspace = true
+specta-typescript = "=0.0.15"
+tauri = { version = "2", features = ["specta"] }
+tauri-specta = { version = "=2.0.0-rc.29", features = ["typescript"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"

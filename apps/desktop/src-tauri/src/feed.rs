@@ -28,7 +28,7 @@ pub fn transcript(session: &Session) -> Arc<Vec<Event>> {
     events
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, specta::Type)]
 pub struct Chat {
     pub agent: Agent,
     pub id: String,
@@ -40,13 +40,13 @@ pub struct Chat {
     pub updated: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, specta::Type)]
 pub struct Task {
     pub text: String,
     pub status: String,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Item {
     User {
@@ -106,7 +106,7 @@ pub fn merge(items: Vec<Item>, mut records: Vec<sombre_core::ledger::Record>) ->
     placed
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, specta::Type)]
 pub struct Entry {
     pub id: usize,
     #[serde(flatten)]

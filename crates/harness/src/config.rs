@@ -14,6 +14,7 @@ const KEYS: [&str; 2] = ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub enum Mode {
     #[default]
     Ask,

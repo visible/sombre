@@ -9,7 +9,7 @@ use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system}
 use serde::Serialize;
 use tauri::ipc::Channel;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Out {
     Data { text: String },

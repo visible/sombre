@@ -8,6 +8,7 @@ use crate::Roots;
 use crate::session::Agent;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct File {
     pub path: String,
     pub added: Option<u32>,
@@ -15,6 +16,7 @@ pub struct File {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct Record {
     pub turn: usize,
     pub from: String,

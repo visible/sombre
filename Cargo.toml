@@ -30,6 +30,7 @@ sombre-core = { path = "crates/core" }
 sombre-engine = { path = "crates/engine" }
 sombre-harness = { path = "crates/harness" }
 sombre-pair = { path = "crates/pair" }
+specta = { version = "=2.0.0-rc.28", features = ["derive"] }
 tempfile = "3"
 
 [workspace.lints.clippy]

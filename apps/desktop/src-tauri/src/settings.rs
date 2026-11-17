@@ -5,7 +5,7 @@ use sombre_core::{Agent, Roots};
 use sombre_harness::config::{Config, GATEWAY, Mode, PRESETS, valid};
 use sombre_harness::mcp;
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, specta::Type)]
 pub struct Provider {
     pub name: String,
     pub url: String,
@@ -13,7 +13,7 @@ pub struct Provider {
     pub builtin: bool,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, specta::Type)]
 pub struct Preset {
     pub id: String,
     pub label: String,
@@ -21,26 +21,26 @@ pub struct Preset {
     pub local: bool,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, specta::Type)]
 pub struct Offer {
     pub from: String,
     pub name: String,
     pub run: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, specta::Type)]
 pub struct Server {
     pub name: String,
     pub run: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, specta::Type)]
 pub struct Skill {
     pub name: String,
     pub about: String,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, specta::Type)]
 pub struct Settings {
     pub agent: Agent,
     pub mode: Mode,
@@ -60,16 +60,25 @@ pub struct Settings {
     pub home: String,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, specta::Type)]
 pub struct Change {
+    #[specta(optional)]
     pub agent: Option<Agent>,
+    #[specta(optional)]
     pub mode: Option<Mode>,
+    #[specta(optional)]
     pub effort: Option<String>,
+    #[specta(optional)]
     pub publish: Option<bool>,
+    #[specta(optional)]
     pub steer: Option<bool>,
+    #[specta(optional)]
     pub awake: Option<bool>,
+    #[specta(optional)]
     pub notify: Option<bool>,
+    #[specta(optional)]
     pub model: Option<String>,
+    #[specta(optional)]
     pub editor: Option<String>,
 }
 
