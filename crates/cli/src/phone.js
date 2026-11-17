@@ -245,6 +245,8 @@ const RULE = /^(?:-{3,}|\*{3,}|_{3,})\s*$/u;
 const BOX = /[─━═]{3,}/gu;
 const SHOWN = 5;
 const PATIENCE = 35_000;
+const GATHER = 100;
+const STREAM = 80;
 const PHOTOS = 4;
 const SENDING = 12_000;
 const LOGOS = {
@@ -699,9 +701,13 @@ const start = () => {
       rule.textContent = "";
     }
   };
+  let scrolling = 0;
   const follow = () => {
     if (state.stick) {
-      bottom();
+      scrolling ||= requestAnimationFrame(() => {
+        scrolling = 0;
+        bottom();
+      });
     } else if (state.joined) {
       latest.hidden = false;
     }
@@ -1000,19 +1006,21 @@ const start = () => {
       state.live = { drawn: false, node: add(element("div", "say")), text: "" };
     }
     state.live.text = text;
+    feed.setAttribute("aria-busy", "true");
     if (!state.live.drawn) {
       state.live.drawn = true;
       const { live } = state;
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         live.drawn = false;
         live.node.replaceChildren(markdown(live.text));
         follow();
-      });
+      }, STREAM);
     }
   };
   const work = () => {
     if (!state.work || feed.lastElementChild !== state.work.node) {
       state.live = null;
+      feed.removeAttribute("aria-busy");
       const group = {
         done: false,
         node: element("div", "work"),
@@ -1024,10 +1032,19 @@ const start = () => {
     }
     return state.work;
   };
+  const redraw = (group) => {
+    if (!group.pending) {
+      group.pending = true;
+      requestAnimationFrame(() => {
+        group.pending = false;
+        draw(group);
+      });
+    }
+  };
   const act = (label, detail) => {
     const group = work();
     group.steps.push({ detail, label, output: "" });
-    draw(group);
+    redraw(group);
   };
   const output = (text) => {
     const step = state.work?.steps.at(-1);
@@ -1036,7 +1053,7 @@ const start = () => {
       return;
     }
     step.output = text;
-    draw(state.work);
+    redraw(state.work);
   };
   const plan = (steps) => {
     settle();
@@ -1205,6 +1222,7 @@ const start = () => {
     );
   };
   const finished = (message) => {
+    feed.removeAttribute("aria-busy");
     if (!message.again) {
       busy(false);
       decide(null);
@@ -1421,7 +1439,7 @@ const start = () => {
         return;
       }
       received(body);
-      timer = setTimeout(listen, 0);
+      timer = setTimeout(listen, body.items.length > 0 ? GATHER : 0);
     } catch {
       if (poll !== control) {
         return;
