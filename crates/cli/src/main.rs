@@ -108,6 +108,9 @@ fn main() -> ExitCode {
         eprintln!("sombre: can't read the current folder");
         return ExitCode::FAILURE;
     };
+    if matches!(cli.command, None | Some(Action::Resume { .. })) {
+        relay::early();
+    }
     let Some(action) = cli.command else {
         return chat::run(start(cli.agent, cwd), &[]);
     };

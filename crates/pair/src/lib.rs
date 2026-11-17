@@ -670,14 +670,21 @@ struct Remote {
     secret: String,
 }
 
+fn agent() -> &'static ureq::Agent {
+    static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
+    AGENT.get_or_init(|| {
+        ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(40)))
+            .build()
+            .into()
+    })
+}
+
 impl Remote {
     fn call(&self, method: &str, action: &str, query: &str, body: &str) -> Option<String> {
         let Self { base, room, secret } = self;
         let url = format!("{base}/r/{room}/{action}?secret={secret}&{query}");
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(Duration::from_secs(40)))
-            .build()
-            .into();
+        let agent = agent();
         let response = if method == "POST" {
             agent.post(&url).send(body)
         } else {
@@ -766,9 +773,13 @@ struct Session {
     answers: Mutex<VecDeque<(String, bool)>>,
     replies: Mutex<VecDeque<(String, Option<Vec<String>>)>>,
     seen: Mutex<VecDeque<[u8; 12]>>,
+    outbox: Mutex<VecDeque<Outgoing>>,
+    queued: Condvar,
     read: AtomicUsize,
     stop: AtomicBool,
 }
+
+type Outgoing = ([u8; 32], Value);
 
 static LIVE: Mutex<Option<Arc<Session>>> = Mutex::new(None);
 static HELD: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
@@ -800,10 +811,63 @@ impl Session {
     }
 
     fn send(&self, key: &[u8; 32], message: &Value) {
-        if let Some(sealed) = seal(key, message.to_string().as_bytes()) {
-            let _ = self.link.call("POST", "out", "", &sealed);
+        if let Ok(mut outbox) = self.outbox.lock() {
+            outbox.push_back((*key, message.clone()));
+            self.queued.notify_one();
         }
     }
+
+    fn deliver(&self) {
+        loop {
+            let batch: Vec<Outgoing> = {
+                let Ok(mut outbox) = self.outbox.lock() else {
+                    return;
+                };
+                while outbox.is_empty() {
+                    if self.stop.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    outbox = match self.queued.wait_timeout(outbox, Duration::from_millis(500)) {
+                        Ok((outbox, _)) => outbox,
+                        Err(_) => return,
+                    };
+                }
+                outbox.drain(..).collect()
+            };
+            for (key, message) in merged(batch) {
+                if let Some(sealed) = seal(&key, message.to_string().as_bytes()) {
+                    let _ = self.link.call("POST", "out", "", &sealed);
+                }
+            }
+        }
+    }
+}
+
+fn streamed(message: &Value) -> bool {
+    message["kind"] == "delta"
+        && message["text"].is_string()
+        && message.as_object().is_some_and(|fields| fields.len() == 2)
+}
+
+fn merged(batch: Vec<Outgoing>) -> Vec<Outgoing> {
+    let mut out: Vec<Outgoing> = Vec::with_capacity(batch.len());
+    for (key, message) in batch {
+        if let Some((last, earlier)) = out.last_mut()
+            && *last == key
+            && streamed(earlier)
+            && streamed(&message)
+        {
+            let joined = format!(
+                "{}{}",
+                earlier["text"].as_str().unwrap_or_default(),
+                message["text"].as_str().unwrap_or_default()
+            );
+            earlier["text"] = json!(joined);
+            continue;
+        }
+        out.push((key, message));
+    }
+    out
 }
 
 pub fn route(to: Ipv4Addr) -> Option<IpAddr> {
@@ -1019,6 +1083,8 @@ fn start(link: Link, key: [u8; 32], seen: VecDeque<[u8; 12]>, read: usize) -> Ar
         keys: Mutex::new((key, None)),
         link,
         messages: Mutex::new(VecDeque::new()),
+        outbox: Mutex::new(VecDeque::new()),
+        queued: Condvar::new(),
         saved: Mutex::new(String::new()),
         read: AtomicUsize::new(read),
         seen: Mutex::new(seen),
@@ -1026,6 +1092,8 @@ fn start(link: Link, key: [u8; 32], seen: VecDeque<[u8; 12]>, read: usize) -> Ar
     });
     let puller = Arc::clone(&session);
     thread::spawn(move || pull(&puller));
+    let sender = Arc::clone(&session);
+    thread::spawn(move || sender.deliver());
     let keeper = Arc::clone(&session);
     thread::spawn(move || {
         while !keeper.stop.load(Ordering::SeqCst) {
@@ -1235,8 +1303,24 @@ fn devices_from(saved: &Value) -> Vec<Device> {
         .collect()
 }
 
+static EARLY: Mutex<Option<thread::JoinHandle<Result<bool, String>>>> = Mutex::new(None);
+
+pub fn early() {
+    if let Ok(mut early) = EARLY.lock() {
+        *early = Some(thread::spawn(resumed));
+    }
+}
+
 pub fn resume() -> Result<bool, String> {
-    let resumed = reopen();
+    let early = EARLY.lock().ok().and_then(|mut early| early.take());
+    match early {
+        Some(handle) => handle.join().unwrap_or(Ok(false)),
+        None => resumed(),
+    }
+}
+
+fn resumed() -> Result<bool, String> {
+    let outcome = reopen();
     let saved = place()
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|text| serde_json::from_str::<Value>(&text).ok());
@@ -1249,7 +1333,7 @@ pub fn resume() -> Result<bool, String> {
     {
         crate::tailscale::release(port);
     }
-    resumed
+    outcome
 }
 
 fn forwarding(port: u16) -> bool {
@@ -1600,11 +1684,47 @@ mod tests {
             keys: Mutex::new(([7; 32], None)),
             link,
             messages: Mutex::new(VecDeque::new()),
+            outbox: Mutex::new(VecDeque::new()),
+            queued: Condvar::new(),
             saved: Mutex::new(String::new()),
             read: AtomicUsize::new(0),
             seen: Mutex::new(VecDeque::new()),
             stop: AtomicBool::new(false),
         }
+    }
+
+    #[test]
+    fn deltas_waiting_together_go_out_as_one_in_order() {
+        let key = [7; 32];
+        let other = [8; 32];
+        let delta = |text: &str| (key, json!({"kind": "delta", "text": text}));
+        let out = merged(vec![
+            delta("fixed "),
+            delta("the "),
+            delta("build"),
+            (
+                key,
+                json!({"kind": "step", "label": "Run", "detail": "cargo test"}),
+            ),
+            delta("all "),
+            (other, json!({"kind": "delta", "text": "green"})),
+            (key, json!({"kind": "delta", "text": "kept", "again": true})),
+        ]);
+        let shown: Vec<String> = out
+            .iter()
+            .map(|(_, message)| format!("{}:{}", message["kind"], message["text"]))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                "\"delta\":\"fixed the build\"",
+                "\"step\":null",
+                "\"delta\":\"all \"",
+                "\"delta\":\"green\"",
+                "\"delta\":\"kept\"",
+            ]
+        );
+        assert_eq!(out[3].0, other);
     }
 
     #[test]
