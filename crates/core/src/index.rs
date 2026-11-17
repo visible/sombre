@@ -90,13 +90,21 @@ pub fn scan(roots: &Roots) -> Vec<Session> {
             Some(entry) if entry.stamp == stamp && entry.size == size => entry.clone(),
             _ => {
                 changed = true;
-                let session = match agent {
-                    Agent::Claude => claude::read(&file),
-                    Agent::Codex => {
+                let session = match (agent, old.files.get(&key)) {
+                    (
+                        Agent::Claude,
+                        Some(Entry {
+                            size: before,
+                            session: Some(session),
+                            ..
+                        }),
+                    ) if size > *before => claude::grown(&file, session, *before),
+                    (Agent::Claude, _) => claude::read(&file),
+                    (Agent::Codex, _) => {
                         let prompts = prompts.get_or_insert_with(|| codex::prompts(&roots.codex));
                         codex::read(&file, prompts)
                     }
-                    Agent::Sombre => sombre::read(&file),
+                    (Agent::Sombre, _) => sombre::read(&file),
                 };
                 Entry {
                     session,
@@ -179,8 +187,32 @@ mod tests {
         }
         save(&file(&roots), &index);
         assert_eq!(scan(&roots)[0].title, "from the index");
-        chat(&path, "changed chat, longer than before");
-        assert_eq!(scan(&roots)[0].title, "changed chat, longer than before");
+        chat(&path, "short");
+        assert_eq!(scan(&roots)[0].title, "short");
+    }
+
+    #[test]
+    fn a_chat_that_grew_keeps_its_entry_and_picks_up_a_rename() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let roots = roots(dir.path());
+        let path = roots.claude.join("projects/-work-atlas/a1.jsonl");
+        chat(&path, "first chat");
+        assert_eq!(scan(&roots)[0].title, "first chat");
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap_or_else(|error| panic!("{error}"));
+        writeln!(
+            file,
+            r#"{{"type":"assistant","cwd":"/work/atlas","message":{{"role":"assistant","content":"done"}}}}"#
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(scan(&roots)[0].title, "first chat");
+        writeln!(file, r#"{{"type":"custom-title","customTitle":"renamed"}}"#)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let found = scan(&roots);
+        assert_eq!(found[0].title, "renamed");
+        assert_eq!(found[0].path, path);
     }
 
     #[test]

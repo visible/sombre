@@ -29,6 +29,36 @@ pub fn files(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+const OVERLAP: u64 = 64 * 1024;
+
+pub fn grown(path: &Path, before: &Session, from: u64) -> Option<Session> {
+    let updated = seconds(fs::metadata(path).ok()?.modified().ok()?);
+    let mut file = File::open(path).ok()?;
+    let start = from.saturating_sub(OVERLAP);
+    file.seek(SeekFrom::Start(start)).ok()?;
+    let mut reader = BufReader::new(file);
+    if start > 0 {
+        reader.read_until(b'\n', &mut Vec::new()).ok()?;
+    }
+    let mut named = None;
+    for line in reader.lines().map_while(Result::ok) {
+        if !line.contains("\"custom-title\"") {
+            continue;
+        }
+        if let Ok(entry) = serde_json::from_str::<Value>(&line)
+            && entry["type"] == "custom-title"
+        {
+            named = entry["customTitle"].as_str().and_then(title).or(named);
+        }
+    }
+    Some(Session {
+        path: path.to_path_buf(),
+        title: named.unwrap_or_else(|| before.title.clone()),
+        updated,
+        ..before.clone()
+    })
+}
+
 pub fn read(path: &Path) -> Option<Session> {
     let id = path.file_stem()?.to_str()?.to_string();
     let updated = seconds(fs::metadata(path).ok()?.modified().ok()?);
@@ -452,6 +482,44 @@ mod tests {
             writeln!(file, "{line}").unwrap_or_else(|error| panic!("{error}"));
         }
         path
+    }
+
+    #[test]
+    fn a_grown_chat_keeps_its_folder_and_prompt_and_picks_up_a_new_name() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let path = write(
+            dir.path(),
+            "ccdbf04b.jsonl",
+            &[
+                r#"{"type":"user","cwd":"/work/atlas","message":{"role":"user","content":"reply with just ok"}}"#,
+                r#"{"type":"assistant","cwd":"/work/atlas","message":{"role":"assistant","content":"ok"}}"#,
+            ],
+        );
+        let before = read(&path).unwrap_or_else(|| panic!("no session"));
+        let size = fs::metadata(&path).map_or(0, |meta| meta.len());
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap_or_else(|error| panic!("{error}"));
+        writeln!(
+            file,
+            r#"{{"type":"assistant","cwd":"/work/atlas","message":{{"role":"assistant","content":"more"}}}}"#
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        let kept = grown(&path, &before, size).unwrap_or_else(|| panic!("no session"));
+        assert_eq!(kept.title, "reply with just ok");
+        assert_eq!(kept.cwd, PathBuf::from("/work/atlas"));
+        writeln!(
+            file,
+            r#"{{"type":"custom-title","customTitle":"ember test","sessionId":"ccdbf04b"}}"#
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        let renamed = grown(&path, &before, size).unwrap_or_else(|| panic!("no session"));
+        assert_eq!(renamed.title, "ember test");
+        assert_eq!(
+            read(&path).map(|session| session.title),
+            Some(renamed.title)
+        );
     }
 
     #[test]
