@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { RefObject } from "react";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
-import { boot, still } from "@/lib/motion";
+import { still } from "@/lib/motion";
 import { session, view } from "@/lib/session";
 import type { View } from "@/lib/session";
 
@@ -68,7 +68,6 @@ interface WatchProps {
 
 const Watch = ({ root, dot }: WatchProps) => {
   useEffect(() => {
-    boot();
     const node = root.current;
     if (!node) {
       return;
@@ -118,10 +117,15 @@ const Watch = ({ root, dot }: WatchProps) => {
       }
       sync();
     };
-    gsap.ticker.add(tick);
+    const grown = new ResizeObserver(tick);
+    grown.observe(document.body);
+    window.addEventListener("scroll", tick, { passive: true });
+    window.addEventListener("resize", tick);
     tick();
     return () => {
-      gsap.ticker.remove(tick);
+      grown.disconnect();
+      window.removeEventListener("scroll", tick);
+      window.removeEventListener("resize", tick);
       pulse?.kill();
     };
   }, [root, dot]);

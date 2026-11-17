@@ -1,6 +1,4 @@
 import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { SplitText } from "gsap/SplitText";
 
 export const ease = {
   in: "power3.in",
@@ -11,16 +9,6 @@ export const ease = {
 export const still = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-let booted = false;
-
-export const boot = () => {
-  if (booted) {
-    return;
-  }
-  booted = true;
-  gsap.registerPlugin(ScrollTrigger, SplitText);
-};
-
 export const scroll = (target: number | string, instant = false) => {
   const behavior = instant || still() ? "instant" : "smooth";
   if (typeof target === "number") {
@@ -28,58 +16,6 @@ export const scroll = (target: number | string, instant = false) => {
     return;
   }
   document.querySelector(target)?.scrollIntoView({ behavior });
-};
-
-const split = (node: HTMLElement) => {
-  SplitText.create(node, {
-    autoSplit: true,
-    mask: "lines",
-    onSplit: (self) =>
-      gsap.from(self.lines, {
-        duration: 1.1,
-        ease: ease.out,
-        scrollTrigger: { once: true, start: "top 90%", trigger: node },
-        stagger: 0.08,
-        yPercent: 110,
-      }),
-    type: "lines",
-  });
-};
-
-export const reveal = () => {
-  boot();
-  const context = still()
-    ? null
-    : gsap.context(() => {
-        for (const node of document.querySelectorAll<HTMLElement>(
-          "[data-split]"
-        )) {
-          split(node);
-        }
-        for (const node of document.querySelectorAll<HTMLElement>(
-          "[data-rule]"
-        )) {
-          gsap.from(node, {
-            duration: 1.4,
-            ease: ease.out,
-            scaleX: 0,
-            scrollTrigger: { once: true, start: "top 94%", trigger: node },
-            transformOrigin: "left center",
-          });
-        }
-        for (const node of document.querySelectorAll<HTMLElement>(
-          "[data-rise]"
-        )) {
-          gsap.from(node, {
-            autoAlpha: 0,
-            duration: 1,
-            ease: ease.out,
-            scrollTrigger: { once: true, start: "top 92%", trigger: node },
-            y: 28,
-          });
-        }
-      });
-  return () => context?.revert();
 };
 
 const stage = () => document.querySelector<HTMLElement>("#stage");
@@ -145,7 +81,6 @@ export const stall = () => {
 };
 
 export const arrive = () => {
-  boot();
   window.clearTimeout(rescue);
   const pushed = mode === "push";
   mode = "idle";

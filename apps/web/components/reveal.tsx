@@ -1,9 +1,8 @@
 "use client";
 
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useEffect } from "react";
 
-import { reveal } from "@/lib/motion";
+const load = () => import("@/lib/reveal");
 
 export const Reveal = () => {
   useEffect(() => {
@@ -11,9 +10,9 @@ export const Reveal = () => {
     let live = true;
     const ready = async () => {
       await document.fonts.ready;
+      const { reveal } = await load();
       if (live) {
         undo = reveal();
-        ScrollTrigger.refresh();
       }
     };
     void ready();

@@ -3,7 +3,7 @@
 import { gsap } from "gsap";
 import { useEffect, useRef } from "react";
 
-import { boot, still as reduced } from "@/lib/motion";
+import { still as reduced } from "@/lib/motion";
 import { angle, heading, lean, noise } from "@/lib/rays";
 
 type Tone = "ember" | "paper";
@@ -42,7 +42,6 @@ export const Horizon = ({ tone = "paper" }: Props) => {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    boot();
     const frame = box.current;
     const node = canvas.current;
     const context = node?.getContext("2d");
@@ -145,6 +144,10 @@ export const Horizon = ({ tone = "paper" }: Props) => {
     };
 
     const move = (event: PointerEvent) => {
+      if (!visible) {
+        pointer = null;
+        return;
+      }
       const rect = node.getBoundingClientRect();
       const inside =
         event.clientX >= rect.left &&
