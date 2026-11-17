@@ -29,7 +29,7 @@
 
 > stack?
 
-  apps/web        next.js · typescript · tailwind · gsap · lenis · bun     the site
+  apps/web        next.js · typescript · tailwind · gsap · bun             the site
   apps/desktop    tauri · react · typescript · tailwind                    the desktop app
   crates/core     rust                                                     session index and readers
   crates/harness  rust                                                     sombre's own agent
@@ -41,7 +41,7 @@
   bun install
   bun run dev                  the site
   bun run desktop              the desktop app, with live reload
-  bun run app                  build the desktop app
+  bun run app                  build the desktop app and install it
   cargo run -p sombre -- ls    the cli
   bun run fix                  format and fix lint
   bun run verify               lint, types, tests, and every build
