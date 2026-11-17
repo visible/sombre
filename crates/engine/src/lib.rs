@@ -395,12 +395,11 @@ impl Engine {
         };
         match output.recv_timeout(wait) {
             Ok(Output::Line(line)) => {
-                if self.agent == Agent::Claude && event::begins(&line) {
-                    let _ = self
-                        .woke
-                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                            count.checked_sub(1)
-                        });
+                if self.agent == Agent::Claude
+                    && event::begins(&line)
+                    && self.woke.load(Ordering::SeqCst) > 0
+                {
+                    self.woke.fetch_sub(1, Ordering::SeqCst);
                 }
                 let events = match (self.agent, self.server.as_mut()) {
                     (_, Some(server)) => server.read(&line),
