@@ -60,6 +60,8 @@ const served = (env: Env, request: Request, url: URL, name: string) =>
   );
 
 const scripts: Record<string, string> = {
+  "/desktop": "/desktop.sh",
+  "/desktop.sh": "/desktop.sh",
   "/install": "/install.sh",
   "/install.ps1": "/install.ps1",
   "/install.sh": "/install.sh",
