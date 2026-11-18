@@ -41,6 +41,53 @@ pub fn replied(input: &Value, answers: &[String]) -> String {
     json!({"id": input["id"], "result": {"answers": answers}}).to_string()
 }
 
+fn explain(message: &str) -> String {
+    let main = [", url: ", ", cf-ray: ", ", request id: "]
+        .iter()
+        .filter_map(|marker| message.find(marker))
+        .min()
+        .map_or(message, |end| &message[..end])
+        .trim();
+    let detail = main
+        .find('{')
+        .zip(main.rfind('}'))
+        .and_then(|(start, end)| serde_json::from_str::<Value>(&main[start..=end]).ok())
+        .and_then(|body| {
+            body["error"]["message"]
+                .as_str()
+                .or_else(|| body["detail"].as_str())
+                .or_else(|| body["message"].as_str())
+                .map(str::to_string)
+        });
+    let status = main
+        .strip_prefix("unexpected status ")
+        .or_else(|| main.split_once("last status: ").map(|(_, rest)| rest))
+        .and_then(|rest| rest.get(..3))
+        .and_then(|code| code.parse::<u16>().ok());
+    match status {
+        _ if main.is_empty() => "codex stopped with an error".to_string(),
+        Some(401 | 403) => {
+            "codex isn't signed in anymore. run codex login in a terminal, then send this again"
+                .to_string()
+        }
+        Some(429) => {
+            "codex is over its usage limit right now. wait a bit, then send this again".to_string()
+        }
+        Some(code) => {
+            let reason = detail.unwrap_or_else(|| {
+                main.split_once(": ")
+                    .map_or(String::new(), |(_, rest)| rest.to_string())
+            });
+            if reason.is_empty() || reason == "Unknown error" {
+                format!("codex's server answered {code}. try again in a moment")
+            } else {
+                format!("codex's server answered {code}: {reason}")
+            }
+        }
+        None => detail.unwrap_or_else(|| main.to_string()),
+    }
+}
+
 fn text(value: &Value) -> String {
     value.as_str().unwrap_or_default().to_string()
 }
@@ -267,7 +314,7 @@ impl Server {
             };
         }
         if message["error"].is_object() {
-            return vec![Event::Failed(text(&message["error"]["message"]))];
+            return vec![Event::Failed(explain(&text(&message["error"]["message"])))];
         }
         let result = &message["result"];
         let Some(id) = result["thread"]["id"].as_str() else {
@@ -455,7 +502,7 @@ impl Server {
                 }
                 self.aiming = false;
                 if turn["status"] == "failed" {
-                    vec![Event::Failed(text(&turn["error"]["message"]))]
+                    vec![Event::Failed(explain(&text(&turn["error"]["message"])))]
                 } else {
                     vec![Event::Done {
                         cost: None,
@@ -487,6 +534,37 @@ mod tests {
             .drain(..)
             .map(|line| serde_json::from_str(&line).unwrap_or_else(|error| panic!("{error}")))
             .collect()
+    }
+
+    #[test]
+    fn codex_errors_drop_their_addresses_and_say_what_to_do() {
+        assert_eq!(
+            explain(
+                "unexpected status 404 Not Found: Unknown error, url: https://chatgpt.com/backend-api/codex/responses, cf-ray: a3559afb681d1416-DUB"
+            ),
+            "codex's server answered 404. try again in a moment"
+        );
+        assert_eq!(
+            explain(
+                r#"unexpected status 401 Unauthorized: {"error":{"message":"Your token expired"}}, url: https://chatgpt.com/backend-api/codex/responses"#
+            ),
+            "codex isn't signed in anymore. run codex login in a terminal, then send this again"
+        );
+        assert_eq!(
+            explain("exceeded retry limit, last status: 429 Too Many Requests, request id: abc"),
+            "codex is over its usage limit right now. wait a bit, then send this again"
+        );
+        assert_eq!(
+            explain(
+                r#"unexpected status 400 Bad Request: {"detail":"The model is not supported"}"#
+            ),
+            "codex's server answered 400: The model is not supported"
+        );
+        assert_eq!(explain(""), "codex stopped with an error");
+        assert_eq!(
+            explain("sandbox denied the write"),
+            "sandbox denied the write"
+        );
     }
 
     #[test]

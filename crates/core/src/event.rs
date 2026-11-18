@@ -285,8 +285,18 @@ pub(crate) fn explain(text: &str, code: Option<&str>) -> String {
         rest.trim_start_matches(|character: char| character.is_ascii_digit())
             .trim_start()
     });
-    let plain = serde_json::from_str::<Value>(plain)
-        .ok()
+    let body = plain
+        .find('{')
+        .zip(plain.rfind('}'))
+        .and_then(|(start, end)| serde_json::from_str::<Value>(&plain[start..=end]).ok());
+    if body
+        .as_ref()
+        .is_some_and(|body| body["error"]["type"] == "authentication_error")
+    {
+        return "Claude Code isn't signed in. Run claude in a terminal and sign in, then send this again."
+            .to_string();
+    }
+    let plain = body
         .and_then(|body| body["error"]["message"].as_str().map(str::to_string))
         .unwrap_or_else(|| plain.to_string());
     if let Some((model, _)) = plain
@@ -1045,6 +1055,24 @@ mod tests {
                 "Opus 5.5's safeguards flagged this message\nSwitch models with /model and send it again, or rephrase it in a new chat\nLearn more: https://support.claude.com/en/articles/8106465"
                     .to_string()
             )]
+        );
+    }
+
+    #[test]
+    fn api_errors_read_their_json_even_with_text_around_it() {
+        assert_eq!(
+            explain(
+                r#"API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"OAuth token has expired."}} · Please run /login"#,
+                None
+            ),
+            "Claude Code isn't signed in. Run claude in a terminal and sign in, then send this again."
+        );
+        assert_eq!(
+            explain(
+                r#"API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}} (retrying)"#,
+                None
+            ),
+            "Internal server error"
         );
     }
 
