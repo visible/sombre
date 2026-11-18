@@ -22,6 +22,14 @@ pub struct Failure {
 }
 
 impl Failure {
+    fn denied(message: String) -> Self {
+        Self {
+            status: Some(401),
+            message,
+            wait: None,
+        }
+    }
+
     fn plain(message: String) -> Self {
         Self {
             message,
@@ -275,7 +283,7 @@ fn events(
     cancel: &AtomicBool,
     mut each: impl FnMut(&Value, &str) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    let key = key(endpoint).map_err(Failure::plain)?;
+    let key = key(endpoint).map_err(Failure::denied)?;
     let mut response = sign(client(600).post(format!("{}/{path}", endpoint.url)), key)
         .send_json(body)
         .map_err(|error| Failure::plain(format!("couldn't reach {}: {error}", endpoint.name)))?;
@@ -884,6 +892,29 @@ mod tests {
         assert!(failure(None).retry());
         assert!(!failure(Some(401)).retry());
         assert!(!failure(Some(400)).retry());
+    }
+
+    #[test]
+    fn a_missing_gateway_key_fails_at_once_without_retrying() {
+        let gateway = Endpoint {
+            key: None,
+            name: crate::config::GATEWAY.to_string(),
+            responses: false,
+            source: None,
+            url: "http://127.0.0.1:9".to_string(),
+        };
+        let tools = json!([]);
+        let ask = Ask {
+            images: false,
+            effort: None,
+            messages: &[],
+            model: "m",
+            tools: &tools,
+        };
+        let failed = stream(&gateway, &ask, &AtomicBool::new(false), |_| {});
+        assert!(failed.as_ref().is_err_and(
+            |failure| !failure.retry() && failure.message.starts_with("no ai gateway key")
+        ));
     }
 
     #[test]
