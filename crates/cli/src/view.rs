@@ -1460,6 +1460,7 @@ pub fn help() {
             "ask, auto, or yolo. shift tab switches between them",
         ),
         ("/effort", "how hard the model thinks, from minimal to max"),
+        ("/update", "install the newest sombre now"),
         (
             "!command",
             "run a shell command here. the agent sees the output next turn",

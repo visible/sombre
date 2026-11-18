@@ -1,4 +1,4 @@
-const COMMANDS: [&str; 18] = [
+const COMMANDS: [&str; 19] = [
     "/resume",
     "/status",
     "/compact",
@@ -15,6 +15,7 @@ const COMMANDS: [&str; 18] = [
     "/provider",
     "/permissions",
     "/effort",
+    "/update",
     "/help",
     "/exit",
 ];

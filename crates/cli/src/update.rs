@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{self, IsTerminal};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -28,9 +28,43 @@ const BINARY: &str = if cfg!(windows) {
 const ARCHIVE: &str = if cfg!(windows) { "zip" } else { "tar.gz" };
 
 static INSTALLED: OnceLock<String> = OnceLock::new();
+static SWAPPED: Mutex<Option<String>> = Mutex::new(None);
 
-fn released() -> bool {
+pub enum Checked {
+    Source,
+    Newest,
+    Installed(String),
+}
+
+pub fn released() -> bool {
     option_env!("SOMBRE_RELEASE").is_some()
+}
+
+pub fn check() -> Result<Checked, String> {
+    if !released() {
+        return Ok(Checked::Source);
+    }
+    let mut swapped = SWAPPED.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(version) = swapped.as_ref() {
+        return Ok(Checked::Installed(version.clone()));
+    }
+    Ok(match install()? {
+        Some(version) => {
+            *swapped = Some(version.clone());
+            Checked::Installed(version)
+        }
+        None => Checked::Newest,
+    })
+}
+
+pub fn said(checked: &Checked) -> String {
+    match checked {
+        Checked::Source => "this sombre was built from source, so it doesn't update itself. install it from sombre.si to get updates".to_string(),
+        Checked::Newest => format!("sombre {} is the newest", env!("CARGO_PKG_VERSION")),
+        Checked::Installed(version) => {
+            format!("sombre {version} is installed. it starts the next time you run sombre")
+        }
+    }
 }
 
 pub fn background() {
@@ -46,7 +80,7 @@ pub fn background() {
     thread::spawn(move || {
         clean();
         if due(&roots.sombre.join("checked"))
-            && let Ok(Some(version)) = install()
+            && let Ok(Checked::Installed(version)) = check()
         {
             let _ = INSTALLED.set(version);
         }
@@ -55,25 +89,17 @@ pub fn background() {
 
 pub fn notice() {
     if let Some(version) = INSTALLED.get() {
-        println!("sombre {version} is installed. it starts the next time you run sombre");
+        println!("{}", said(&Checked::Installed(version.clone())));
     }
 }
 
 pub fn run() -> ExitCode {
-    if !released() {
-        println!(
-            "this sombre was built from source, so it doesn't update itself. install it from sombre.si to get updates"
-        );
-        return ExitCode::SUCCESS;
+    if released() {
+        println!("checking for a newer sombre");
     }
-    println!("checking for a newer sombre");
-    match install() {
-        Ok(Some(version)) => {
-            println!("updated to sombre {version}");
-            ExitCode::SUCCESS
-        }
-        Ok(None) => {
-            println!("sombre {} is the newest", env!("CARGO_PKG_VERSION"));
+    match check() {
+        Ok(checked) => {
+            println!("{}", said(&checked));
             ExitCode::SUCCESS
         }
         Err(error) => {
