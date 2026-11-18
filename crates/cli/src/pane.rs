@@ -134,13 +134,13 @@ pub fn behind() -> Option<String> {
         0 => format!(
             "{} {}",
             view::ember("↑"),
-            view::dim("scrolled up  ctrl+end to return")
+            view::dim("scrolled up · ctrl+end to return")
         ),
         count => format!(
             "{} {}",
             view::ember("↓"),
             view::dim(&format!(
-                "{count} new {}  ctrl+end",
+                "{count} new {} · ctrl+end",
                 if count == 1 { "line" } else { "lines" }
             ))
         ),

@@ -463,10 +463,11 @@ pub fn marked(
     (shown, row)
 }
 
-pub fn framed(rows: Vec<String>, shell: bool, footer: &[String], columns: usize) -> Vec<String> {
-    let label =
-        crate::pane::behind().unwrap_or_else(|| if shell { "shell" } else { "" }.to_string());
-    let mut frame = vec![view::clip(&label, columns.saturating_sub(1))];
+pub fn framed(rows: Vec<String>, footer: &[String], columns: usize) -> Vec<String> {
+    let mut frame: Vec<String> = crate::pane::behind()
+        .map(|label| view::clip(&label, columns.saturating_sub(1)))
+        .into_iter()
+        .collect();
     frame.extend(rows);
     frame.push(String::new());
     frame.push(view::footer(footer, columns));
@@ -474,7 +475,7 @@ pub fn framed(rows: Vec<String>, shell: bool, footer: &[String], columns: usize)
 }
 
 pub fn idle(footer: &[String], columns: usize) -> Vec<String> {
-    framed(lines("", false, None, columns), false, footer, columns)
+    framed(lines("", false, None, columns), footer, columns)
 }
 
 pub fn read(
@@ -511,13 +512,10 @@ pub fn read(
             .saturating_sub(4)
             .max(1);
         let first = (row + 1).saturating_sub(height);
-        let window = framed(
-            shown.iter().skip(first).take(height).cloned().collect(),
-            *shell,
-            &current,
-            columns,
-        );
-        let at = 1 + row - first;
+        let visible: Vec<String> = shown.iter().skip(first).take(height).cloned().collect();
+        let count = visible.len();
+        let window = framed(visible, &current, columns);
+        let at = window.len().saturating_sub(2 + count) + row - first;
         if pinned {
             crate::pane::draw(&window, Some((at, column + 2)));
         } else {

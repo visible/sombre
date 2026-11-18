@@ -26,6 +26,7 @@ const KEPT: usize = 4_000;
 const ROWS: usize = 2_000;
 
 static STEPPING: AtomicBool = AtomicBool::new(false);
+static ECHOED: AtomicBool = AtomicBool::new(false);
 static STORY: Mutex<Vec<Entry>> = Mutex::new(Vec::new());
 static EARLIER: Mutex<Vec<Entry>> = Mutex::new(Vec::new());
 static SINK: Mutex<Option<Vec<String>>> = Mutex::new(None);
@@ -128,6 +129,7 @@ pub fn untee() -> Option<String> {
 }
 
 fn put(line: &str) {
+    ECHOED.store(false, Ordering::Relaxed);
     if let Ok(mut sink) = SINK.lock()
         && let Some(sink) = sink.as_mut()
     {
@@ -388,6 +390,9 @@ fn steering(text: &str, columns: usize) -> Vec<String> {
 
 pub fn typed(shell: bool, text: &str) {
     keep(Entry::Typed(shell, text.to_string()));
+    if ECHOED.load(Ordering::Relaxed) {
+        put("");
+    }
     let rows = if shell {
         crate::compose::lines(text, shell, None, width())
     } else {
@@ -396,6 +401,7 @@ pub fn typed(shell: bool, text: &str) {
     for line in rows {
         put(&line);
     }
+    ECHOED.store(true, Ordering::Relaxed);
 }
 
 pub fn resize() {
@@ -480,10 +486,12 @@ fn rendered(live: Option<&Prose>) -> Vec<String> {
     let _held = hold();
     let story = STORY.lock().map(|story| story.clone()).unwrap_or_default();
     let stepping = STEPPING.load(Ordering::Relaxed);
+    let echoed = ECHOED.load(Ordering::Relaxed);
     if let Ok(mut sink) = SINK.lock() {
         *sink = Some(Vec::new());
     }
     STEPPING.store(false, Ordering::Relaxed);
+    ECHOED.store(false, Ordering::Relaxed);
     for entry in story {
         show(entry);
     }
@@ -492,6 +500,7 @@ fn rendered(live: Option<&Prose>) -> Vec<String> {
         again.push(live.emitted());
     }
     STEPPING.store(stepping, Ordering::Relaxed);
+    ECHOED.store(echoed, Ordering::Relaxed);
     SINK.lock()
         .ok()
         .and_then(|mut sink| sink.take())
@@ -704,8 +713,9 @@ pub fn notify(message: &str) {
 }
 
 pub fn wrap(text: &str, room: usize) -> Vec<String> {
-    let options =
-        textwrap::Options::new(room.max(10)).word_separator(textwrap::WordSeparator::AsciiSpace);
+    let options = textwrap::Options::new(room.max(10))
+        .word_separator(textwrap::WordSeparator::AsciiSpace)
+        .word_splitter(textwrap::WordSplitter::NoHyphenation);
     textwrap::wrap(text, options)
         .into_iter()
         .map(|line| line.into_owned())
@@ -888,10 +898,14 @@ pub fn card(body: &str, most: usize, columns: usize) -> Vec<String> {
             if line.is_empty() {
                 vec![String::new()]
             } else {
-                textwrap::wrap(line, limit)
-                    .into_iter()
-                    .map(|part| part.into_owned())
-                    .collect()
+                textwrap::wrap(
+                    line,
+                    textwrap::Options::new(limit)
+                        .word_splitter(textwrap::WordSplitter::NoHyphenation),
+                )
+                .into_iter()
+                .map(|part| part.into_owned())
+                .collect()
             }
         })
         .collect();
@@ -963,7 +977,8 @@ impl Prose {
         let wrap = |lead: &str, rest: &str, body: &str| {
             let options = textwrap::Options::new(limit + 2)
                 .initial_indent(lead)
-                .subsequent_indent(rest);
+                .subsequent_indent(rest)
+                .word_splitter(textwrap::WordSplitter::NoHyphenation);
             for line in textwrap::wrap(body, options) {
                 put(&line);
             }
@@ -1479,6 +1494,21 @@ mod tests {
             .map(|row| sombre_core::scrub::scrub(row))
             .collect();
         assert_eq!(rows, ["  ↳ first line", "    here", "", "    second one"]);
+    }
+
+    #[test]
+    fn flags_and_paths_never_split_at_a_hyphen() {
+        for room in 18..40 {
+            for row in wrap(
+                "how -n or --force work in sombre-test and x86_64-pc-windows",
+                room,
+            ) {
+                assert!(!row.ends_with('-'), "{room}: {row}");
+            }
+            for row in card("try -n or sombre-test/work here", 10, room + 3) {
+                assert!(!crate::dock::bare(&row).ends_with('-'), "{room}: {row}");
+            }
+        }
     }
 
     #[test]

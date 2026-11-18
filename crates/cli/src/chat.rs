@@ -633,11 +633,10 @@ pub fn pick<'a>(sessions: &'a [Session], cwd: &Path, all: bool) -> Option<&'a Se
 }
 
 fn command_line(command: &str, cwd: &Path, stop: &AtomicBool) -> Option<String> {
-    view::line("");
-    view::step("Run", command, cwd);
     let ran = shell::run(command, cwd, stop, false, |line| {
-        view::line(&format!("    {line}"));
+        view::line(&format!("  {}", view::dim(line)));
     });
+    view::stepped();
     match ran {
         Ok(ran) => {
             match (ran.stopped, ran.code) {

@@ -287,15 +287,25 @@ fn draw(options: &[Choice], labels: &[String], selected: usize, mode: Mode) {
     let _ = write!(
         out,
         "\r\n  {}\r\n",
-        dim(&fit(
-            &format!(
-                "↑↓ to move, enter to confirm, esc to say no. permissions: {}, shift tab switches",
-                mode.name()
-            ),
-            width().saturating_sub(4).max(20)
-        ))
+        dim(&keys(mode.name(), width().saturating_sub(4).max(20)))
     );
     let _ = out.flush();
+}
+
+fn keys(mode: &str, room: usize) -> String {
+    let choices = [
+        format!(
+            "↑↓ to move, enter to confirm, esc to say no. permissions: {mode}, shift tab switches"
+        ),
+        format!("↑↓ to move, enter to confirm, esc to say no. {mode}, shift tab switches"),
+        "↑↓ to move, enter to confirm, esc to say no".to_string(),
+        "enter to confirm, esc to say no".to_string(),
+    ];
+    choices
+        .iter()
+        .find(|choice| crate::view::cells(choice) <= room)
+        .cloned()
+        .unwrap_or_else(|| fit(&choices[3], room))
 }
 
 pub fn erase(lines: usize) {
@@ -310,6 +320,21 @@ pub fn erase(lines: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_key_hint_drops_whole_phrases_to_fit() {
+        assert!(keys("ask", 100).ends_with("permissions: ask, shift tab switches"));
+        assert_eq!(
+            keys("ask", 76),
+            "↑↓ to move, enter to confirm, esc to say no. ask, shift tab switches"
+        );
+        assert_eq!(
+            keys("ask", 50),
+            "↑↓ to move, enter to confirm, esc to say no"
+        );
+        assert_eq!(keys("ask", 40), "enter to confirm, esc to say no");
+        assert!(crate::view::cells(&keys("ask", 20)) <= 20);
+    }
 
     #[test]
     fn approvals_show_every_line_of_a_command() {
