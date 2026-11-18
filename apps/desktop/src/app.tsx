@@ -572,6 +572,7 @@ export const App = () => {
           <Preferences
             chats={all}
             installed={installed}
+            key={section}
             onChange={configureWith}
             onClose={() => setView("chat")}
             onEdit={edit}

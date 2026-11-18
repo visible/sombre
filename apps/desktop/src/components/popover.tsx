@@ -6,6 +6,21 @@ import { fit } from "../lib/place";
 export const chip =
   "flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[12.5px] text-fog hover:bg-well hover:text-body active:bg-rim aria-expanded:bg-well aria-expanded:text-paper disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent";
 
+export const Caret = () => (
+  <svg
+    aria-hidden="true"
+    className="size-3 shrink-0 opacity-70"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="1.5"
+    viewBox="0 0 16 16"
+  >
+    <path d="m4.5 6.5 3.5 3.5 3.5-3.5" />
+  </svg>
+);
+
 type Side = "top" | "bottom";
 
 const place = (

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Option, Popover, chip } from "./popover";
+import { Caret, Option, Popover, chip } from "./popover";
 
 interface Props<T extends string> {
   label: string;
@@ -21,9 +21,12 @@ export const Pick = <T extends string>({
     label={label}
     side="bottom"
     trigger={
-      <span>
-        {options.find((option) => option.value === value)?.label ?? value}
-      </span>
+      <>
+        <span className="text-body">
+          {options.find((option) => option.value === value)?.label ?? value}
+        </span>
+        <Caret />
+      </>
     }
   >
     {(close) =>

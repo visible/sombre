@@ -20,6 +20,7 @@ export type {
   Change,
   Changed,
   Chat,
+  Checked,
   Choice,
   Defaults,
   Diff,
@@ -143,6 +144,8 @@ export const forget = (id: string) => commands.forget(id);
 export const unpair = () => commands.unpair();
 
 export const take = (key: string) => commands.take(key);
+
+export const check = () => commands.check();
 
 export const ready = () => commands.ready();
 

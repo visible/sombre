@@ -4,6 +4,16 @@ import { useEffect, useState } from "react";
 import { failure, ready, restart } from "../lib/api";
 import { toast } from "../lib/toasts";
 
+export const relaunch = async () => {
+  try {
+    await restart();
+    return true;
+  } catch (error) {
+    toast({ body: failure(error), title: "sombre didn't restart yet" });
+    return false;
+  }
+};
+
 export const Update = () => {
   const [version, setVersion] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,10 +36,7 @@ export const Update = () => {
 
   const go = async () => {
     setBusy(true);
-    try {
-      await restart();
-    } catch (error) {
-      toast({ body: failure(error), title: "sombre didn't restart yet" });
+    if (!(await relaunch())) {
       setBusy(false);
     }
   };

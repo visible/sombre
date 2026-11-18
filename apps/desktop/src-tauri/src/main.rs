@@ -945,6 +945,7 @@ fn bindings() -> tauri_specta::Builder<tauri::Wry> {
             resize,
             hangup,
             shot::shot,
+            update::check,
             update::ready,
             update::restart
         ])
