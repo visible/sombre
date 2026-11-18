@@ -51,6 +51,8 @@ pub struct Task {
 pub enum Item {
     User {
         text: String,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        images: Vec<String>,
     },
     Text {
         text: String,
@@ -176,7 +178,15 @@ pub fn story(
     let mut items: Vec<Item> = Vec::new();
     for event in events {
         match event.scrubbed() {
-            Event::Prompt(text) => items.push(Item::User { text }),
+            Event::Prompt(text) => items.push(Item::User {
+                text,
+                images: Vec::new(),
+            }),
+            Event::Attached(path) => {
+                if let Some(Item::User { images, .. }) = items.last_mut() {
+                    images.push(path);
+                }
+            }
             Event::Text(text) => items.push(Item::Text { text }),
             Event::Delta(text) => match items.last_mut() {
                 Some(Item::Text { text: last }) => last.push_str(&text),
@@ -231,6 +241,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn pasted_images_stay_with_the_message_they_came_with() {
+        let story = story(
+            vec![
+                Event::Prompt("why is the title wrong".to_string()),
+                Event::Attached("/home/.sombre/images/pasted/s1-u1-0.png".to_string()),
+                Event::Text("the tab shows the process name".to_string()),
+                Event::Attached("/home/.sombre/images/pasted/stray.png".to_string()),
+            ],
+            Path::new("/work"),
+            Vec::new(),
+        );
+        let users: Vec<&Item> = story
+            .iter()
+            .map(|entry| &entry.item)
+            .filter(|item| matches!(item, Item::User { .. }))
+            .collect();
+        assert_eq!(
+            users,
+            [&Item::User {
+                text: "why is the title wrong".to_string(),
+                images: vec!["/home/.sombre/images/pasted/s1-u1-0.png".to_string()],
+            }]
+        );
+    }
+
+    #[test]
     fn a_chat_opened_twice_is_parsed_once_until_its_file_changes() {
         let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
         let path = dir.path().join("chat.jsonl");
@@ -271,6 +307,7 @@ mod tests {
         };
         let user = |text: &str| Item::User {
             text: text.to_string(),
+            images: Vec::new(),
         };
         let reply = |text: &str| Item::Text {
             text: text.to_string(),
@@ -282,7 +319,7 @@ mod tests {
         let kinds: Vec<String> = placed
             .iter()
             .map(|item| match item {
-                Item::User { text } | Item::Text { text } => text.clone(),
+                Item::User { text, .. } | Item::Text { text } => text.clone(),
                 Item::Changes { from, .. } => from.clone(),
                 _ => String::new(),
             })

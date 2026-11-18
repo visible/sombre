@@ -1904,7 +1904,7 @@ fn pump(
                     echoed += 1;
                 }
                 Event::Note(message) => view::note(&message),
-                Event::Prompt(_) => {}
+                Event::Prompt(_) | Event::Attached(_) => {}
                 Event::Text(_)
                 | Event::Delta(_)
                 | Event::Step { .. }

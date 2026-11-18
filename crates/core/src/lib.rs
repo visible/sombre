@@ -6,6 +6,7 @@ pub mod event;
 pub mod handoff;
 mod index;
 pub mod ledger;
+pub mod pasted;
 pub mod purge;
 pub mod scrub;
 pub mod server;

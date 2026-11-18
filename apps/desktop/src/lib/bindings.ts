@@ -138,7 +138,7 @@ export type Installed = {
 	docs: string,
 };
 
-export type Item = { kind: "user"; text: string } | { kind: "text"; text: string } | { kind: "step"; step: string; label: string; detail: string; output: string; failed: boolean; patch: string[] } | { kind: "plan"; tasks: Task[] } | { kind: "note"; text: string } | { kind: "failed"; text: string } | { kind: "changes"; from: string; to: string; files: File[] } | { kind: "done"; millis: number | null; cost: number | null };
+export type Item = { kind: "user"; text: string; images?: string[] } | { kind: "text"; text: string } | { kind: "step"; step: string; label: string; detail: string; output: string; failed: boolean; patch: string[] } | { kind: "plan"; tasks: Task[] } | { kind: "note"; text: string } | { kind: "failed"; text: string } | { kind: "changes"; from: string; to: string; files: File[] } | { kind: "done"; millis: number | null; cost: number | null };
 
 export type Mode = "ask" | "auto" | "yolo";
 

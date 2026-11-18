@@ -34,6 +34,7 @@ pub enum Event {
         reason: String,
     },
     Round(String),
+    Attached(String),
     Approval {
         id: String,
         tool: String,
@@ -110,6 +111,7 @@ impl Event {
                 status,
             },
             Self::Round(reason) => Self::Round(clean(reason)),
+            Self::Attached(path) => Self::Attached(path),
             Self::Approval {
                 id,
                 tool,

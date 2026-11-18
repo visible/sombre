@@ -944,6 +944,11 @@ fn main() {
     match app {
         Ok(app) => {
             guard(app.handle().clone());
+            if let Some(roots) = Roots::detect() {
+                let _ = app
+                    .asset_protocol_scope()
+                    .allow_directory(roots.sombre.join("images"), true);
+            }
             app.run(|handle, event| {
                 if let RunEvent::Exit = event {
                     handle.state::<Live>().close();

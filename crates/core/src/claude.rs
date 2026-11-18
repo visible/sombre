@@ -109,10 +109,10 @@ pub fn transcript(path: &Path) -> Vec<Event> {
         .filter(|entry| !entry["isSidechain"].as_bool().unwrap_or(false))
     {
         if typed(&entry) {
-            events.extend(
-                prompt(&entry["message"]["content"])
-                    .map(|text| Event::Prompt(text.trim_end().to_string())),
-            );
+            if let Some(text) = prompt(&entry["message"]["content"]) {
+                events.push(Event::Prompt(text.trim_end().to_string()));
+                events.extend(pictures(&entry).into_iter().map(Event::Attached));
+            }
         } else if entry["subtype"] == "compact_boundary" {
             events.push(Event::Note(COMPACTED.to_string()));
         } else if entry["isApiErrorMessage"] == true {
@@ -172,14 +172,33 @@ fn typed(entry: &Value) -> bool {
         && !entry["isCompactSummary"].as_bool().unwrap_or(false)
 }
 
+fn pictures(entry: &Value) -> Vec<String> {
+    let session = entry["sessionId"].as_str().unwrap_or_default();
+    let uuid = entry["uuid"].as_str().unwrap_or_default();
+    entry["message"]["content"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|block| block["type"] == "image" && block["source"]["type"] == "base64")
+        .enumerate()
+        .filter_map(|(index, block)| {
+            crate::pasted::keep(
+                &format!("{session}-{uuid}-{index}"),
+                block["source"]["media_type"].as_str()?,
+                block["source"]["data"].as_str()?,
+            )
+        })
+        .collect()
+}
+
 fn prompt(content: &Value) -> Option<&str> {
     let text = match content {
         Value::String(text) => text.as_str(),
         Value::Array(blocks) => blocks
             .iter()
-            .find(|block| block["type"] == "text")?
-            .get("text")?
-            .as_str()?,
+            .filter(|block| block["type"] == "text")
+            .filter_map(|block| block["text"].as_str())
+            .find(|text| !text.trim_start().starts_with("[Image: source:"))?,
         _ => return None,
     };
     let trimmed = text.trim_start();
@@ -519,6 +538,40 @@ mod tests {
         assert_eq!(
             read(&path).map(|session| session.title),
             Some(renamed.title)
+        );
+    }
+
+    #[test]
+    fn a_pasted_image_comes_back_with_its_prompt_and_the_source_note_is_skipped() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        crate::pasted::FOLDER.with(|folder| *folder.borrow_mut() = Some(dir.path().join("pasted")));
+        let pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        let line = format!(
+            r#"{{"type":"user","uuid":"u1","sessionId":"s1","cwd":"/work","message":{{"role":"user","content":[{{"type":"text","text":"[Image: source: /tmp/claude-501/images/74.png]"}},{{"type":"text","text":"[Image #1] why is the title wrong"}},{{"type":"image","source":{{"type":"base64","media_type":"image/png","data":"{pixel}"}}}}]}}}}"#
+        );
+        let path = write(dir.path(), "s1.jsonl", &[&line]);
+        let events = transcript(&path);
+        assert_eq!(
+            events[0],
+            Event::Prompt("[Image #1] why is the title wrong".to_string())
+        );
+        let Some(Event::Attached(stored)) = events.get(1) else {
+            panic!("no image: {events:?}");
+        };
+        assert!(stored.ends_with("s1-u1-0.png"));
+        assert_eq!(
+            fs::read(stored).map(|bytes| bytes[1..4].to_vec()).ok(),
+            Some(b"PNG".to_vec())
+        );
+        fs::write(stored, b"kept").unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(
+            transcript(&path).get(1),
+            Some(&Event::Attached(stored.clone()))
+        );
+        assert_eq!(fs::read(stored).ok(), Some(b"kept".to_vec()));
+        assert_eq!(
+            read(&path).map(|session| session.title),
+            Some("[Image #1] why is the title wrong".to_string())
         );
     }
 

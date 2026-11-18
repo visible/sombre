@@ -20,7 +20,7 @@ serde_json.workspace = true
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 specta.workspace = true
 specta-typescript = "=0.0.15"
-tauri = { version = "2", features = ["specta"] }
+tauri = { version = "2", features = ["protocol-asset", "specta"] }
 tauri-specta = { version = "=2.0.0-rc.29", features = ["typescript"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"

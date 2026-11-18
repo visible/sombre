@@ -4,11 +4,20 @@ import type { Entry as Item } from "../lib/api";
 import { money } from "../lib/format";
 import { Copy } from "./copy";
 import { Markdown } from "./markdown";
+import { Pictures } from "./pictures";
 
 const LONG = 700;
 const LINES = 12;
 
-const Prompt = ({ text, steered }: { text: string; steered?: boolean }) => {
+const Prompt = ({
+  text,
+  steered,
+  images,
+}: {
+  text: string;
+  steered?: boolean;
+  images?: string[];
+}) => {
   const long = text.length > LONG || text.split("\n").length > LINES;
   const [open, setOpen] = useState(false);
   const clamped = long && !open;
@@ -32,6 +41,7 @@ const Prompt = ({ text, steered }: { text: string; steered?: boolean }) => {
             {open ? "show less" : "show all"}
           </button>
         ) : null}
+        <Pictures images={images ?? []} />
       </div>
     </div>
   );
@@ -49,7 +59,13 @@ interface Props {
 export const Entry = ({ entry }: Props) => {
   switch (entry.kind) {
     case "user": {
-      return <Prompt steered={entry.steered} text={entry.text} />;
+      return (
+        <Prompt
+          images={entry.images}
+          steered={entry.steered}
+          text={entry.text}
+        />
+      );
     }
     case "text": {
       return (

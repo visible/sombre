@@ -251,7 +251,7 @@ impl Gate {
                 Pass::Skip
             }
             Event::Note(text) => Pass::Show(Update::Note { text }),
-            Event::Prompt(_) => Pass::Skip,
+            Event::Prompt(_) | Event::Attached(_) => Pass::Skip,
             Event::Goal { status, reason } => Pass::Goal(status, reason),
             Event::Round(_) => Pass::Round,
             Event::Text(_)
@@ -1249,24 +1249,42 @@ impl Live {
 const REPLAYED: usize = 1_000;
 
 fn replayed(history: Vec<Event>) -> Vec<serde_json::Value> {
-    let shown: Vec<serde_json::Value> = history
-        .into_iter()
-        .flat_map(|event| match event.scrubbed() {
-            Event::Prompt(text) => vec![json!({"kind": "user", "text": text})],
-            Event::Done { millis, cost, left } => {
-                vec![json!({"cost": cost, "kind": "done", "left": left, "millis": millis})]
+    let mut shown: Vec<serde_json::Value> = Vec::new();
+    for event in history {
+        match event.scrubbed() {
+            Event::Prompt(text) => shown.push(json!({"images": [], "kind": "user", "text": text})),
+            Event::Attached(path) => {
+                if let Some(images) = shown
+                    .last_mut()
+                    .filter(|last| last["kind"] == "user")
+                    .and_then(|last| last["images"].as_array_mut())
+                {
+                    images.push(json!({"path": path}));
+                }
             }
-            Event::Approval { .. } | Event::Questions { .. } | Event::Delta(_) => Vec::new(),
-            shown => sombre_pair::shown(&shown),
-        })
-        .map(|mut item| {
-            item["again"] = json!(true);
-            item
-        })
-        .collect();
+            Event::Done { millis, cost, left } => {
+                shown.push(json!({"cost": cost, "kind": "done", "left": left, "millis": millis}));
+            }
+            Event::Approval { .. } | Event::Questions { .. } | Event::Delta(_) => {}
+            other => shown.extend(sombre_pair::shown(&other)),
+        }
+    }
     let skip = shown.len().saturating_sub(REPLAYED);
-    shown.into_iter().skip(skip).collect()
+    let mut kept: Vec<serde_json::Value> = shown.into_iter().skip(skip).collect();
+    let mut pictures = 0;
+    for item in kept.iter_mut().rev() {
+        if let Some(images) = item["images"].as_array_mut() {
+            if pictures >= PICTURES {
+                images.clear();
+            }
+            pictures += images.len();
+        }
+        item["again"] = json!(true);
+    }
+    kept
 }
+
+const PICTURES: usize = 20;
 
 #[cfg(test)]
 mod tests {
@@ -1274,6 +1292,24 @@ mod tests {
 
     fn text(value: &str) -> Event {
         Event::Text(value.to_string())
+    }
+
+    #[test]
+    fn a_replayed_chat_brings_its_latest_pasted_images() {
+        let mut history = Vec::new();
+        for turn in 0..25 {
+            history.push(Event::Prompt(format!("look at {turn}")));
+            history.push(Event::Attached(format!("/pasted/{turn}.png")));
+        }
+        let replay = replayed(history);
+        let pictured: Vec<usize> = replay
+            .iter()
+            .filter_map(|item| item["images"].as_array().map(Vec::len))
+            .collect();
+        assert_eq!(pictured.len(), 25);
+        assert_eq!(pictured.iter().sum::<usize>(), PICTURES);
+        assert_eq!(replay[24]["images"][0]["path"], "/pasted/24.png");
+        assert!(replay[0]["images"].as_array().is_some_and(Vec::is_empty));
     }
 
     #[test]

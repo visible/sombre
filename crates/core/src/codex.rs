@@ -64,7 +64,16 @@ pub fn transcript(path: &Path) -> Vec<Event> {
         let payload = &entry["payload"];
         match payload["type"].as_str() {
             Some("item_completed") => events.extend(item(&payload["item"])),
-            Some("user_message") => events.extend(said(payload).map(Event::Prompt)),
+            Some("user_message") => {
+                if let Some(text) = said(payload) {
+                    events.push(Event::Prompt(text));
+                    events.extend(
+                        attached(path, &entry, payload)
+                            .into_iter()
+                            .map(Event::Attached),
+                    );
+                }
+            }
             Some("agent_message") => events.extend(said(payload).map(Event::Text)),
             Some("thread_settings_applied") => {
                 if let Some(model) = payload["thread_settings"]["model"].as_str() {
@@ -138,6 +147,39 @@ fn item(item: &Value) -> Option<Event> {
         }),
         _ => None,
     }
+}
+
+fn attached(path: &Path, entry: &Value, payload: &Value) -> Vec<String> {
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default();
+    let stamp: String = entry["timestamp"]
+        .as_str()
+        .unwrap_or_default()
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect();
+    let listed = |key: &str| -> Vec<String> {
+        payload[key]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect()
+    };
+    let inline = listed("images")
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, data)| crate::pasted::url(&format!("{stem}-{stamp}-{index}"), &data));
+    let local = listed("local_images")
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, file)| {
+            crate::pasted::copy(&format!("{stem}-{stamp}-local{index}"), Path::new(&file))
+        });
+    inline.chain(local).collect()
 }
 
 fn said(payload: &Value) -> Option<String> {
@@ -398,8 +440,36 @@ pub fn publish(path: &Path) -> std::io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
+
+    use super::*;
+
+    #[test]
+    fn codex_images_come_back_with_their_prompt() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        crate::pasted::FOLDER.with(|folder| *folder.borrow_mut() = Some(dir.path().join("pasted")));
+        let local = dir.path().join("shot.png");
+        std::fs::write(&local, b"png bytes").unwrap_or_else(|error| panic!("{error}"));
+        let pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        let line = format!(
+            r#"{{"timestamp":"2026-11-18T01:02:03.004Z","type":"event_msg","payload":{{"type":"user_message","message":"what is in these","images":["data:image/png;base64,{pixel}"],"local_images":["{}"],"text_elements":[]}}}}"#,
+            local.display()
+        );
+        let path = dir.path().join("rollout-a1.jsonl");
+        std::fs::write(&path, format!("{line}\n")).unwrap_or_else(|error| panic!("{error}"));
+        let events = transcript(&path);
+        assert_eq!(events[0], Event::Prompt("what is in these".to_string()));
+        let stored: Vec<String> = events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Attached(path) => Some(path.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(stored.len(), 2);
+        assert!(stored[0].ends_with(".png") && stored[1].ends_with("local0.png"));
+        assert_eq!(std::fs::read(&stored[1]).ok(), Some(b"png bytes".to_vec()));
+    }
 
     const META: &str = r#"{"timestamp":"2026-11-10T18:33:57Z","type":"session_meta","payload":{"id":"019a-abc","cwd":"/work/atlas","originator":"codex_cli_rs"}}"#;
 
