@@ -185,7 +185,7 @@ fn target(config: &Config, name: &str) -> Option<Target> {
 
 fn choose(config: &Config, name: &str) -> Option<String> {
     let endpoint = config.endpoint(name)?;
-    view::spin(0, 0);
+    view::spin();
     let listed = sombre_harness::provider::models(&endpoint);
     view::clear();
     let picked = match listed {

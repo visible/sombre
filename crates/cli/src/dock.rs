@@ -9,9 +9,8 @@ use crossterm::execute;
 use crossterm::terminal::{self, ClearType};
 
 use crate::compose::{Composer, Key, Keys, marked};
-use crate::view::{dim, ember, fit, rule, width};
+use crate::view::{dim, ember, fit, width};
 
-const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const SHOWN: usize = 3;
 
 pub fn bare(line: &str) -> String {
@@ -157,27 +156,28 @@ impl Draft {
         Action::Nothing
     }
 
-    pub fn lines(&self, frame: usize, seconds: u64, columns: usize) -> Vec<String> {
+    pub fn lines(&self, since: Duration, columns: usize) -> Vec<String> {
         let room = columns.saturating_sub(6).max(10);
-        let glyph = SPINNER[frame % SPINNER.len()].to_string();
         let status = fit(
-            &format!("working  {seconds}s  esc to stop"),
-            columns.saturating_sub(9),
+            &format!(
+                "working {} · esc to stop",
+                crate::view::took(u64::try_from(since.as_millis()).unwrap_or(u64::MAX))
+            ),
+            columns.saturating_sub(4),
         );
-        let marker = crate::pane::behind().map_or_else(String::new, |marker| format!("  {marker}"));
-        let mut lines = vec![rule(
-            &format!("{} {}{marker}", ember(&glyph), dim(&status)),
-            columns,
+        let marker =
+            crate::pane::behind().map_or_else(String::new, |marker| format!(" · {marker}"));
+        let mut lines = vec![crate::view::clip(
+            &format!("{} {}{marker}", crate::view::pulse(since), dim(&status)),
+            columns.saturating_sub(1),
         )];
+        lines.push(String::new());
         for message in self.queued.iter().take(SHOWN) {
             let message = message.replace('\n', " ");
-            lines.push(format!("  {}", dim(&fit(&format!("↳ {message}"), room))));
+            lines.push(dim(&fit(&format!("┋ {message}"), room)));
         }
         if self.queued.len() > SHOWN {
-            lines.push(format!(
-                "  {}",
-                dim(&format!("… {} more", self.queued.len() - SHOWN))
-            ));
+            lines.push(dim(&format!("┋ … {} more", self.queued.len() - SHOWN)));
         }
         if self.editor.text.is_empty() {
             let keys = if self.steer {
@@ -193,7 +193,7 @@ impl Draft {
             };
             lines.push(format!(
                 "{} {}",
-                ember("❯"),
+                ember("┃"),
                 dim(&fit(&hint, room.saturating_sub(2)))
             ));
             return lines;
@@ -251,7 +251,6 @@ pub struct Dock {
     tallest: usize,
     keys: Option<Keys>,
     widths: Vec<usize>,
-    frame: usize,
     started: Instant,
     drawn: Instant,
     plan: Vec<String>,
@@ -272,7 +271,6 @@ impl Dock {
                 ..Draft::default()
             },
             drawn: Instant::now(),
-            frame: 0,
             saved,
             started: Instant::now(),
             plan: Vec::new(),
@@ -300,10 +298,8 @@ impl Dock {
         }
         let columns = width();
         let mut lines = vec![
-            rule(
-                &format!("{} {}", ember("●"), dim("waiting for your answer")),
-                columns,
-            ),
+            format!("• {}", dim("waiting for your answer")),
+            String::new(),
             crate::view::footer(&self.footer, columns),
         ];
         self.tallest = self.tallest.max(lines.len());
@@ -379,13 +375,10 @@ impl Dock {
         if self.drawn.elapsed() < Duration::from_millis(80) && !self.widths.is_empty() {
             return;
         }
-        self.frame += 1;
         let columns = width();
         let mut lines: Vec<String> = self.plan.clone();
-        lines.extend(
-            self.draft
-                .lines(self.frame, self.started.elapsed().as_secs(), columns),
-        );
+        lines.extend(self.draft.lines(self.started.elapsed(), columns));
+        lines.push(String::new());
         lines.push(crate::view::footer(&self.footer, columns));
         if crate::pane::pinned() {
             self.tallest = self.tallest.max(lines.len());
@@ -613,7 +606,7 @@ mod tests {
             },
             ..Draft::default()
         }
-        .lines(0, 0, 60);
+        .lines(Duration::ZERO, 60);
         assert!(
             lines
                 .last()
@@ -670,23 +663,25 @@ mod tests {
             ..Draft::default()
         };
         draft.editor.set("next");
-        let lines = draft.lines(0, 12, 46);
-        assert_eq!(lines.len(), 6);
-        assert!(lines[0].contains("12s"));
-        assert!(lines[4].contains("1 more"));
-        assert!(visible(&lines[5]).eq(&visible("❯ next ")));
-        assert!(lines[5].contains("next"));
+        let lines = draft.lines(Duration::from_secs(12), 46);
+        assert_eq!(lines.len(), 7);
+        assert!(bare(&lines[0]).starts_with("• working 12s · esc to stop"));
+        assert!(lines[1].is_empty());
+        assert_eq!(bare(&lines[2]), "┋ a");
+        assert!(bare(&lines[5]).contains("1 more"));
+        assert!(visible(&lines[6]).eq(&visible("┃ next ")));
+        assert!(lines[6].contains("next"));
     }
 
     #[test]
     fn wraps_long_drafts_and_keeps_the_caret_row_visible() {
         let mut draft = Draft::default();
         draft.editor.set(&format!("{}end", "word ".repeat(40)));
-        let lines = draft.lines(0, 0, 30);
-        assert_eq!(lines.len(), 1 + TALLEST);
+        let lines = draft.lines(Duration::ZERO, 30);
+        assert_eq!(lines.len(), 2 + TALLEST);
         assert!(lines.iter().all(|line| visible(line) < 30));
         assert!(lines.last().is_some_and(|line| line.contains("end")));
         draft.editor.set("one\ntwo");
-        assert_eq!(draft.lines(0, 0, 30).len(), 3);
+        assert_eq!(draft.lines(Duration::ZERO, 30).len(), 4);
     }
 }

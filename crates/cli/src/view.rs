@@ -3,6 +3,7 @@ use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 use crossterm::cursor::MoveTo;
 use crossterm::execute;
@@ -19,12 +20,7 @@ const EMBER: Color = Color::Rgb {
     g: 91,
     b: 20,
 };
-const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 pub const RECENT: usize = 10;
-
-const LABELS: [&str; 12] = [
-    "Run", "Read", "Edit", "Find", "Web", "List", "Plan", "Goal", "MCP", "Task", "Test", "View",
-];
 
 const KEPT: usize = 4_000;
 const ROWS: usize = 2_000;
@@ -392,7 +388,12 @@ fn steering(text: &str, columns: usize) -> Vec<String> {
 
 pub fn typed(shell: bool, text: &str) {
     keep(Entry::Typed(shell, text.to_string()));
-    for line in crate::compose::lines(text, shell, None, width()) {
+    let rows = if shell {
+        crate::compose::lines(text, shell, None, width())
+    } else {
+        card(text, usize::MAX, width())
+    };
+    for line in rows {
         put(&line);
     }
 }
@@ -790,22 +791,17 @@ pub fn version() {
     ]);
 }
 
-pub fn banner(agent: &str, model: Option<&str>, mode: &str, cwd: &Path) {
-    let place = home(cwd);
-    let mode = match mode {
-        "ask" => String::new(),
-        "yolo" => format!("  {}", bold("yolo")),
-        other => format!("  {}", dim(other)),
-    };
-    let side = [
-        bold("sombre"),
-        match model {
-            Some(model) => format!("{agent}  {}{mode}", dim(&format!("{model}  in {place}"))),
-            None => format!("{agent} {}{mode}", dim(&format!("in {place}"))),
-        },
-        dim("/resume  /new  /provider  /model  /help  /exit"),
-    ];
-    beside(&side);
+pub fn banner() {
+    let version = env!("CARGO_PKG_VERSION");
+    put(&clip(
+        &format!(
+            "{}{}",
+            bold("sombre"),
+            dim(&format!(" v{version} · /help for commands"))
+        ),
+        width().saturating_sub(1),
+    ));
+    put("");
 }
 
 static SHOWN: AtomicUsize = AtomicUsize::new(0);
@@ -878,24 +874,43 @@ pub fn history(items: &[Item], cwd: &Path) -> usize {
 fn said(body: &str) {
     keep(Entry::Said(body.to_string()));
     gap();
-    let limit = breadth();
-    let lines: Vec<String> = body
-        .lines()
-        .flat_map(|line| textwrap::wrap(line, limit))
-        .map(|line| line.into_owned())
-        .collect();
-    for (index, line) in lines.iter().take(6).enumerate() {
-        let lead = if index == 0 {
-            ember("❯")
-        } else {
-            " ".to_string()
-        };
-        put(&format!("{lead} {line}"));
-    }
-    if lines.len() > 6 {
-        put(&format!("  {}", dim("…")));
+    for row in card(body, 6, width()) {
+        put(&row);
     }
     put("");
+}
+
+pub fn card(body: &str, most: usize, columns: usize) -> Vec<String> {
+    let limit = columns.saturating_sub(3).max(10);
+    let lines: Vec<String> = body
+        .lines()
+        .flat_map(|line| {
+            if line.is_empty() {
+                vec![String::new()]
+            } else {
+                textwrap::wrap(line, limit)
+                    .into_iter()
+                    .map(|part| part.into_owned())
+                    .collect()
+            }
+        })
+        .collect();
+    let bar = ember("┃");
+    let mut rows: Vec<String> = lines
+        .iter()
+        .take(most)
+        .map(|line| {
+            if line.is_empty() {
+                bar.clone()
+            } else {
+                format!("{bar} {}", bold(line))
+            }
+        })
+        .collect();
+    if lines.len() > most {
+        rows.push(format!("{bar} {}", dim("…")));
+    }
+    rows
 }
 
 pub fn text(body: &str) {
@@ -910,6 +925,7 @@ pub struct Prose {
     partial: String,
     source: String,
     started: bool,
+    fenced: bool,
 }
 
 impl Prose {
@@ -955,22 +971,32 @@ impl Prose {
         match self.reader.line(line) {
             Block::Heading(spans) => wrap("  ", "  ", &bold(&paint(&spans))),
             Block::Bullet(marker, spans) => {
-                let lead = format!("  {marker} ");
-                let rest = " ".repeat(lead.width());
+                let lead = format!("  {} ", dim(&marker));
+                let rest = " ".repeat(marker.width() + 3);
                 wrap(&lead, &rest, &paint(&spans));
             }
             Block::Quote(spans) => {
                 let lead = format!("  {} ", dim("│"));
                 wrap(&lead, &lead, &dim(&paint(&spans)));
             }
-            Block::Fence(_) => {}
-            Block::Code(code) => {
-                put(&format!(
-                    "  {} {}",
-                    dim("▏"),
-                    fit(&code, limit.saturating_sub(2))
-                ));
+            Block::Fence(language) => {
+                let size = limit.min(40);
+                if self.fenced || language.is_empty() {
+                    put(&format!("  {}", dim(&"─".repeat(size))));
+                } else {
+                    let label = fit(&language, size.saturating_sub(4));
+                    let used = label.width() + 3;
+                    put(&format!(
+                        "  {}",
+                        dim(&format!(
+                            "─ {label} {}",
+                            "─".repeat(size.saturating_sub(used))
+                        ))
+                    ));
+                }
+                self.fenced = !self.fenced;
             }
+            Block::Code(code) => put(&format!("  {}", fit(&code, limit))),
             Block::Rule => put(&format!("  {}", dim(&"─".repeat(limit.min(40))))),
             Block::Blank => put(""),
             Block::Text(spans) => wrap("  ", "  ", &paint(&spans)),
@@ -1009,32 +1035,8 @@ pub fn relative(text: &str, cwd: &Path) -> String {
 pub fn row(label: &str, detail: &str, cwd: &Path) -> String {
     let detail = relative(detail, cwd);
     let detail = detail.lines().next().unwrap_or_default();
-    let column = LABELS
-        .iter()
-        .map(|known| known.width())
-        .chain([label.width()])
-        .max()
-        .unwrap_or_default();
-    let room = width().saturating_sub(column + 8).max(10);
-    format!(
-        "  {} {}  {}",
-        ember("■"),
-        bold(&pad(label, column)),
-        dim(&fit(detail, room))
-    )
-}
-
-pub fn rule(label: &str, columns: usize) -> String {
-    let room = columns.saturating_sub(1);
-    if label.is_empty() {
-        return dim(&"─".repeat(room));
-    }
-    let used = crate::dock::visible(label) + 4;
-    format!(
-        "{} {label} {}",
-        dim("──"),
-        dim(&"─".repeat(room.saturating_sub(used)))
-    )
+    let room = width().saturating_sub(label.width() + 6).max(10);
+    format!("  ● {label} {}", dim(&fit(detail, room)))
 }
 
 fn shorten(part: &str, room: usize) -> String {
@@ -1054,12 +1056,12 @@ fn shorten(part: &str, room: usize) -> String {
 }
 
 pub fn footer(parts: &[String], columns: usize) -> String {
-    let room = columns.saturating_sub(3);
+    let room = columns.saturating_sub(1);
     let size = |part: &str| crate::dock::visible(part);
     let mut parts = parts.to_vec();
     loop {
         let used =
-            parts.iter().map(|part| size(part)).sum::<usize>() + 2 * parts.len().saturating_sub(1);
+            parts.iter().map(|part| size(part)).sum::<usize>() + 3 * parts.len().saturating_sub(1);
         let Some((index, widest)) = parts
             .iter()
             .enumerate()
@@ -1069,18 +1071,21 @@ pub fn footer(parts: &[String], columns: usize) -> String {
         else {
             break;
         };
-        if used <= room || widest <= 8 {
+        if used <= room || widest <= 12 {
             break;
         }
         parts[index] = shorten(&parts[index], widest.saturating_sub(used - room).max(8));
     }
-    let line = parts.join("  ");
+    while parts.len() > 1 && size(&parts.join(" · ")) > room {
+        parts.pop();
+    }
+    let line = parts.join(" · ");
     let line = if size(&line) > room {
         fit(&crate::dock::bare(&line), room)
     } else {
         line
     };
-    format!("  {}", dim(&line))
+    dim(&line)
 }
 
 pub fn step(label: &str, detail: &str, cwd: &Path) {
@@ -1098,7 +1103,7 @@ pub fn tallied(counts: &[(String, usize)]) -> String {
         .iter()
         .map(|(label, count)| format!("{} {}", bold(label), dim(&format!("×{count}"))))
         .collect();
-    format!("  {} {}", ember("■"), parts.join("  "))
+    format!("  ● {}", parts.join("  "))
 }
 
 pub fn tally(counts: &[(String, usize)]) {
@@ -1297,44 +1302,39 @@ pub fn done(
         left,
     ));
     gap();
-    let mut parts = vec![agent.to_string()];
-    parts.extend(model.map(str::to_string));
-    if let Some(millis) = millis {
-        parts.push(format!("{:.1}s", millis as f64 / 1000.0));
-    }
+    let mut parts: Vec<String> = millis.map(took).into_iter().collect();
     if let Some(cost) = cost.filter(|cost| *cost > 0.0) {
         parts.push(money(cost));
     }
-    if let Some(left) = left {
-        parts.push(format!("{left}% context left"));
+    if !parts.is_empty() {
+        put(&format!(
+            "  {}",
+            dim(&fit(&parts.join(" · "), width().saturating_sub(3)))
+        ));
+        put("");
     }
-    for line in packed(&parts, width().saturating_sub(3)) {
-        put(&format!("  {}", dim(&line)));
-    }
-    put("");
 }
 
-fn packed(parts: &[String], room: usize) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-    for part in parts {
-        match lines.last_mut() {
-            Some(line) if line.width() + 2 + part.width() <= room => {
-                line.push_str("  ");
-                line.push_str(part);
-            }
-            _ => lines.push(fit(part, room)),
-        }
+pub fn took(millis: u64) -> String {
+    let seconds = millis / 1000;
+    match seconds {
+        0 => "<1s".to_string(),
+        1..60 => format!("{seconds}s"),
+        60..3600 => format!("{}m {}s", seconds / 60, seconds % 60),
+        _ => format!("{}h {:02}m", seconds / 3600, seconds / 60 % 60),
     }
-    lines
 }
 
-pub fn spin(frame: usize, seconds: u64) {
-    let glyph = SPINNER[frame % SPINNER.len()].to_string();
-    print!(
-        "\r  {} {}",
-        ember(&glyph),
-        dim(&format!("working  {seconds}s  ctrl-c to stop"))
-    );
+pub fn pulse(since: Duration) -> String {
+    if (since.as_millis() / 500).is_multiple_of(2) {
+        "•".to_string()
+    } else {
+        " ".to_string()
+    }
+}
+
+pub fn spin() {
+    print!("\r• {}", dim("working · ctrl-c to stop"));
     let _ = io::stdout().flush();
 }
 
@@ -1492,25 +1492,32 @@ mod tests {
     }
 
     #[test]
-    fn summaries_wrap_between_parts_and_never_inside_one() {
-        let parts: Vec<String> = [
-            "claude code",
-            "claude-opus-5-5",
-            "5.7s",
-            "$0.24",
-            "97% context left",
-        ]
-        .map(str::to_string)
-        .to_vec();
-        assert_eq!(
-            packed(&parts, 42),
-            [
-                "claude code  claude-opus-5-5  5.7s  $0.24",
-                "97% context left"
-            ]
-        );
-        assert_eq!(packed(&parts, 200).len(), 1);
-        assert_eq!(packed(&parts[..1], 6), ["claud…"]);
+    fn turn_times_read_like_a_clock() {
+        assert_eq!(took(400), "<1s");
+        assert_eq!(took(6_200), "6s");
+        assert_eq!(took(130_000), "2m 10s");
+        assert_eq!(took(3_900_000), "1h 05m");
+    }
+
+    #[test]
+    fn the_working_dot_blinks_every_half_second() {
+        assert_eq!(pulse(Duration::from_millis(100)), "•");
+        assert_eq!(pulse(Duration::from_millis(600)), " ");
+        assert_eq!(pulse(Duration::from_millis(1_100)), "•");
+    }
+
+    #[test]
+    fn a_message_keeps_its_bar_on_every_row() {
+        let rows: Vec<String> = card("one two three four five\n\nsix", 10, 14)
+            .iter()
+            .map(|row| crate::dock::bare(row))
+            .collect();
+        assert_eq!(rows, ["┃ one two", "┃ three four", "┃ five", "┃", "┃ six"]);
+        let cut: Vec<String> = card("a\nb\nc", 2, 40)
+            .iter()
+            .map(|row| crate::dock::bare(row))
+            .collect();
+        assert_eq!(cut, ["┃ a", "┃ b", "┃ …"]);
     }
 
     #[test]
@@ -1522,13 +1529,35 @@ mod tests {
             "~/Desktop/sombre".to_string(),
         ];
         let wide = footer(&parts, 100);
-        assert!(wide.contains("abliterated-model-large-v2  yolo  ~/Desktop/sombre"));
+        assert!(wide.contains("abliterated-model-large-v2 · yolo · ~/Desktop/sombre"));
         let narrow = footer(&parts, 45);
         assert!(crate::dock::visible(&narrow) <= 44, "{narrow}");
-        assert!(narrow.contains("~/Desktop/sombre") && narrow.contains("sombre  abliter"));
+        assert!(narrow.contains("~/Desktop/sombre") && narrow.contains("sombre · abliter"));
         let tiny = footer(&parts, 30);
         assert!(crate::dock::visible(&tiny) <= 29, "{tiny}");
         assert!(tiny.contains("sombre") && tiny.contains('…'));
+    }
+
+    #[test]
+    fn a_narrow_footer_drops_whole_parts_from_the_end() {
+        let parts: Vec<String> = [
+            "claude code",
+            "opus 5-5",
+            "yolo",
+            "97% left",
+            "$0.02",
+            "/private/tmp/sombre-test/look/work",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        assert_eq!(
+            crate::dock::bare(&footer(&parts, 45)),
+            "claude code · opus 5-5 · yolo · 97% left"
+        );
+        assert!(
+            crate::dock::bare(&footer(&parts, 120))
+                .ends_with("· $0.02 · /private/tmp/sombre-test/look/work")
+        );
     }
 
     #[test]

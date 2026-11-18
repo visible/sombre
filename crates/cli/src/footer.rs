@@ -113,16 +113,34 @@ pub fn parts(engine: &Engine) -> Vec<String> {
         context: engine.left.map(|left| format!("{left}% left")),
         cost: engine.cost.map(view::money),
         folder: Some(view::home(&engine.cwd)),
-        model: engine.label.clone(),
+        model: engine.label.as_deref().map(short),
         permissions: Some(engine.mode.name().to_string()),
         pr,
     };
     assemble(&order, &values)
 }
 
+fn short(model: &str) -> String {
+    model
+        .strip_prefix("claude-")
+        .map_or_else(|| model.to_string(), |rest| rest.replacen('-', " ", 1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn claude_models_drop_their_family_prefix() {
+        assert_eq!(short("claude-opus-5-5"), "opus 5-5");
+        assert_eq!(short("claude-sonnet-5-5[1m]"), "sonnet 5-5[1m]");
+        assert_eq!(short("opus"), "opus");
+        assert_eq!(short("gpt-6.2-sol"), "gpt-6.2-sol");
+        assert_eq!(
+            short("gateway:anthropic/claude-sonnet-5.5"),
+            "gateway:anthropic/claude-sonnet-5.5"
+        );
+    }
 
     fn values() -> Values {
         Values {

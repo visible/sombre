@@ -400,21 +400,13 @@ pub fn lines(text: &str, shell: bool, hint: Option<&str>, columns: usize) -> Vec
     let lead = if shell {
         view::ember("!")
     } else {
-        view::ember("❯")
+        view::ember("┃")
     };
     let room = columns.saturating_sub(3).max(10);
     let found = rows(text, room);
     let mut shown: Vec<String> = found
         .iter()
-        .enumerate()
-        .map(|(index, range)| {
-            let start = if index == 0 {
-                format!("{lead} ")
-            } else {
-                "  ".to_string()
-            };
-            format!("{start}{}", &text[range.clone()])
-        })
+        .map(|range| format!("{lead} {}", &text[range.clone()]))
         .collect();
     if let (Some(hint), Some(last), Some(range)) = (hint, shown.last_mut(), found.last()) {
         let used = text[range.clone()]
@@ -439,11 +431,7 @@ pub fn marked(
         .iter()
         .enumerate()
         .map(|(index, range)| {
-            let lead = if index == 0 {
-                format!("{} ", view::ember("❯"))
-            } else {
-                "  ".to_string()
-            };
+            let lead = format!("{} ", view::ember("┃"));
             if index != row {
                 return format!("{lead}{}", &text[range.clone()]);
             }
@@ -478,8 +466,9 @@ pub fn marked(
 pub fn framed(rows: Vec<String>, shell: bool, footer: &[String], columns: usize) -> Vec<String> {
     let label =
         crate::pane::behind().unwrap_or_else(|| if shell { "shell" } else { "" }.to_string());
-    let mut frame = vec![view::rule(&label, columns)];
+    let mut frame = vec![view::clip(&label, columns.saturating_sub(1))];
     frame.extend(rows);
+    frame.push(String::new());
     frame.push(view::footer(footer, columns));
     frame
 }
@@ -729,7 +718,7 @@ mod tests {
         assert!(shown[0].contains("one") && shown[0].ends_with("two"));
         assert_eq!(
             crate::dock::visible(&shown[0]),
-            crate::dock::visible("❯ one two")
+            crate::dock::visible("┃ one two")
         );
         let (end, row) = marked("one\ntwo", 7, None, 40);
         assert_eq!(row, 1);
@@ -744,7 +733,7 @@ mod tests {
         let (shown, _) = marked("/mo", 3, Some("del"), 40);
         assert_eq!(
             crate::dock::visible(&shown[0]),
-            crate::dock::visible("❯ /model")
+            crate::dock::visible("┃ /model")
         );
         assert!(crate::dock::bare(&shown[0]).ends_with("/model"));
         let (inside, _) = marked("/mo", 1, Some("del"), 40);

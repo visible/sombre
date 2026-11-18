@@ -1347,12 +1347,7 @@ fn footer(engine: &Engine) -> Vec<String> {
 }
 
 fn screen(engine: &Engine, history: &[Event]) -> usize {
-    view::banner(
-        engine.name(),
-        engine.label.as_deref(),
-        engine.mode.name(),
-        &engine.cwd,
-    );
+    view::banner();
     view::history(history, &engine.cwd)
 }
 
@@ -1592,7 +1587,7 @@ fn catalog(roots: &Roots, agent: Agent) -> Vec<Model> {
     if agent != Agent::Sombre {
         return roots.models(agent);
     }
-    view::spin(0, 0);
+    view::spin();
     let found = sombre_engine::catalog(roots, agent);
     view::clear();
     match found {
