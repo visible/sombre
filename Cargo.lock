@@ -4129,7 +4129,7 @@ dependencies = [
 
 [[package]]
 name = "sombre"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.23.1",
  "clap",
@@ -4152,7 +4152,7 @@ dependencies = [
 
 [[package]]
 name = "sombre-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.23.1",
  "serde",
@@ -4163,7 +4163,7 @@ dependencies = [
 
 [[package]]
 name = "sombre-desktop"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.23.1",
  "block2",
@@ -4193,7 +4193,7 @@ dependencies = [
 
 [[package]]
 name = "sombre-engine"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde_json",
  "sombre-core",
@@ -4203,7 +4203,7 @@ dependencies = [
 
 [[package]]
 name = "sombre-harness"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.23.1",
  "keyring-core",
@@ -4220,7 +4220,7 @@ dependencies = [
 
 [[package]]
 name = "sombre-pair"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.23.1",
  "image",
