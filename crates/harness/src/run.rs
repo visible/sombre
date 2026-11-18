@@ -388,12 +388,13 @@ impl Worker {
                 Err(failure) if failure.retry() && attempt < WAITS.len() && !self.stopped() => {
                     let seconds = failure.wait.unwrap_or(WAITS[attempt]).min(60);
                     attempt += 1;
+                    let why = match failure.status {
+                        None => failure.message.clone(),
+                        Some(429) => format!("{} is busy", endpoint.name),
+                        Some(_) => format!("{} had a problem on its side", endpoint.name),
+                    };
                     self.send(Event::Note(format!(
-                        "{} is busy ({}). trying again in {seconds}s, esc to stop",
-                        endpoint.name,
-                        failure
-                            .status
-                            .map_or_else(|| "no answer".to_string(), |status| status.to_string())
+                        "{why}. trying again in {seconds}s, esc to stop"
                     )));
                     let until = Instant::now() + std::time::Duration::from_secs(seconds);
                     while Instant::now() < until && !self.stopped() {

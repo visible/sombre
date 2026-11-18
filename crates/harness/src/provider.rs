@@ -96,7 +96,7 @@ pub fn chat(
         key,
     )
     .send_json(&body)
-    .map_err(|error| format!("couldn't reach {}: {error}", endpoint.name))?;
+    .map_err(|error| unreachable(&endpoint.name, &error))?;
     let status = response.status().as_u16();
     let text = response.body_mut().read_to_string().map_err(|error| {
         format!(
@@ -286,7 +286,7 @@ fn events(
     let key = key(endpoint).map_err(Failure::denied)?;
     let mut response = sign(client(600).post(format!("{}/{path}", endpoint.url)), key)
         .send_json(body)
-        .map_err(|error| Failure::plain(format!("couldn't reach {}: {error}", endpoint.name)))?;
+        .map_err(|error| Failure::plain(unreachable(&endpoint.name, &error)))?;
     let status = response.status().as_u16();
     if status >= 400 {
         let wait = response
@@ -577,6 +577,22 @@ fn fault(endpoint: &Endpoint, status: u16, reply: &Value, text: &str) -> String 
     problem(&endpoint.name, status, reply, text)
 }
 
+pub fn unreachable(name: &str, error: &ureq::Error) -> String {
+    match error {
+        ureq::Error::Io(problem) if problem.kind() == std::io::ErrorKind::ConnectionRefused => {
+            format!("{name} isn't answering. check that it's running")
+        }
+        ureq::Error::Timeout(_) => format!("{name} took too long to answer"),
+        ureq::Error::HostNotFound => {
+            format!("couldn't find {name}. check your connection and its url")
+        }
+        ureq::Error::Io(_) | ureq::Error::ConnectionFailed => {
+            format!("couldn't reach {name}. check your connection")
+        }
+        other => format!("couldn't reach {name}: {other}"),
+    }
+}
+
 pub fn problem(name: &str, status: u16, reply: &Value, text: &str) -> String {
     let detail = reply["error"]["message"]
         .as_str()
@@ -595,7 +611,7 @@ pub fn models(endpoint: &Endpoint) -> Result<Vec<Listed>, String> {
     let key = key(endpoint)?;
     let mut response = sign(client(20).get(format!("{}/models", endpoint.url)), key)
         .call()
-        .map_err(|error| format!("couldn't reach {}: {error}", endpoint.name))?;
+        .map_err(|error| unreachable(&endpoint.name, &error))?;
     let status = response.status().as_u16();
     let text = response
         .body_mut()
@@ -892,6 +908,20 @@ mod tests {
         assert!(failure(None).retry());
         assert!(!failure(Some(401)).retry());
         assert!(!failure(Some(400)).retry());
+    }
+
+    #[test]
+    fn network_failures_read_as_plain_sentences() {
+        let refused = ureq::Error::Io(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
+        assert_eq!(
+            unreachable("ollama", &refused),
+            "ollama isn't answering. check that it's running"
+        );
+        assert_eq!(
+            unreachable("gateway", &ureq::Error::HostNotFound),
+            "couldn't find gateway. check your connection and its url"
+        );
+        assert!(!unreachable("gateway", &refused).contains("os error"));
     }
 
     #[test]
