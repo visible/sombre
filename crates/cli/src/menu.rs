@@ -179,7 +179,7 @@ fn summary(title: &str, answer: &str, columns: usize) -> Vec<String> {
             last.push_str("  ");
             last.push_str(answer);
         }
-        _ => rows.push(format!("  {answer}")),
+        _ => rows.push(format!("  {}", crate::view::fit(answer, room))),
     }
     rows
 }
@@ -674,6 +674,18 @@ impl<T: Clone> Multi<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_long_answer_fits_its_row_instead_of_wrapping() {
+        let rows = summary(
+            "resume any chat",
+            "read main.rs and tell me in one short sentence what it prints",
+            45,
+        );
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|row| visible(row) <= 44), "{rows:?}");
+        assert!(crate::dock::bare(&rows[1]).ends_with('…'));
+    }
 
     #[test]
     fn summaries_wrap_long_questions_and_keep_the_answer_whole() {
