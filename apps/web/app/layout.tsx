@@ -17,7 +17,7 @@ const host = Host_Grotesk({
 const plex = IBM_Plex_Mono({
   subsets: ["latin"],
   variable: "--font-plex",
-  weight: ["400", "500"],
+  weight: ["400"],
 });
 
 export const metadata: Metadata = {

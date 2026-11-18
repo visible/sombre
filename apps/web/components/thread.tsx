@@ -81,7 +81,7 @@ const Step = ({ entry, device, before, after }: Body) => {
                 className="border-line bg-sheet text-body flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
                 key={file}
               >
-                <span className="text-meta font-mono text-[8px] font-medium">
+                <span className="text-meta font-mono text-[8px]">
                   {file.endsWith(".tsx") ? "TSX" : "TS"}
                 </span>
                 {file}
