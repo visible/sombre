@@ -92,17 +92,35 @@ async fn chat(
     known: State<'_, Known>,
     agent: Agent,
     id: String,
-) -> Result<Vec<feed::Entry>, String> {
+    whole: bool,
+) -> Result<Story, String> {
     let session = known.find(agent, &id).ok_or_else(gone)?;
     let roots = roots()?;
     blocking(move || {
-        feed::story(
-            feed::transcript(&session).as_ref().clone(),
-            &session.cwd,
-            sombre_core::ledger::read(&roots, agent, &id),
-        )
+        let (events, whole) = if whole {
+            (feed::transcript(&session).as_ref().clone(), true)
+        } else {
+            sombre_core::recent(&session, RECENT)
+        };
+        let records = if whole {
+            sombre_core::ledger::read(&roots, agent, &id)
+        } else {
+            Vec::new()
+        };
+        Story {
+            entries: feed::story(events, &session.cwd, records),
+            whole,
+        }
     })
     .await
+}
+
+const RECENT: usize = 40;
+
+#[derive(Serialize, specta::Type)]
+struct Story {
+    entries: Vec<feed::Entry>,
+    whole: bool,
 }
 
 fn described(path: &Path, home: Option<&Path>) -> Folder {
@@ -172,7 +190,7 @@ fn resumed(session: &Session) -> Result<Engine, String> {
         ));
     }
     let roots = Roots::detect();
-    let history = feed::transcript(session);
+    let (history, _) = sombre_core::recent(session, 0);
     let chosen = recorded(&history);
     let mut engine = Engine::new(session.agent, session.cwd.clone(), Some(session.id.clone()));
     engine.model = chosen

@@ -109,8 +109,12 @@ export const rotate = (mode: Mode): Mode => {
 
 export const chats = () => commands.chats();
 
-export const chat = (agent: Agent, id: string): Promise<Entry[]> =>
-  commands.chat(agent, id);
+export const chat = (
+  agent: Agent,
+  id: string,
+  whole: boolean
+): Promise<{ entries: Entry[]; whole: boolean }> =>
+  commands.chat(agent, id, whole);
 
 export const defaults = () => commands.defaults();
 

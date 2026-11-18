@@ -48,7 +48,10 @@ const drafts = new Map<string, string>();
 const aliases = new Map<string, string>();
 const opened = new Set<string>();
 const starting = new Map<string, Promise<null>>();
-const stories = new Map<string, { entries: Entry[]; updated: number }>();
+const stories = new Map<
+  string,
+  { entries: Entry[]; updated: number; whole: boolean }
+>();
 const prompts = new Map<string, number>();
 const KEPT = 6;
 const unread = new Set<string>();
@@ -197,7 +200,7 @@ const save = (
   live: Live,
   update: Extract<Update, { kind: "changes" }>
 ) => {
-  if (!live.session) {
+  if (!live.session || stories.get(key)?.whole === false) {
     return;
   }
   const asked =
@@ -515,13 +518,22 @@ export const isOpen = (key: string) => opened.has(key);
 
 export const remembered = (key: string) => stories.get(key)?.entries;
 
-export const unchanged = (key: string, updated: number) =>
-  stories.get(key)?.updated === updated;
+export const unchanged = (key: string, updated: number) => {
+  const found = stories.get(key);
+  return found !== undefined && found.whole && found.updated === updated;
+};
 
-export const remember = (key: string, entries: Entry[], updated: number) => {
+export const remember = (
+  key: string,
+  entries: Entry[],
+  updated: number,
+  whole: boolean
+) => {
   stories.delete(key);
-  stories.set(key, { entries, updated });
-  prompts.set(key, entries.filter((entry) => entry.kind === "user").length);
+  stories.set(key, { entries, updated, whole });
+  if (whole) {
+    prompts.set(key, entries.filter((entry) => entry.kind === "user").length);
+  }
   for (const old of stories.keys()) {
     if (stories.size <= KEPT) {
       break;

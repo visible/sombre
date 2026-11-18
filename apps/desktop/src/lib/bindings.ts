@@ -3,7 +3,7 @@ import type { InvokeOptions } from "@tauri-apps/api/core";
 
 export const commands = {
 	chats: (options?: InvokeOptions) => __TAURI_INVOKE<Chat[]>("chats", undefined, options),
-	chat: (agent: Agent, id: string, options?: InvokeOptions) => __TAURI_INVOKE<Entry[]>("chat", { agent, id }, options),
+	chat: (agent: Agent, id: string, whole: boolean, options?: InvokeOptions) => __TAURI_INVOKE<Story>("chat", { agent, id, whole }, options),
 	defaults: (options?: InvokeOptions) => __TAURI_INVOKE<Defaults>("defaults", undefined, options),
 	folder: (path: string, options?: InvokeOptions) => __TAURI_INVOKE<Folder>("folder", { path }, options),
 	models: (agent: Agent, options?: InvokeOptions) => __TAURI_INVOKE<Model[]>("models", { agent }, options),
@@ -253,6 +253,11 @@ export type Settings = {
 export type Skill = {
 	name: string,
 	about: string,
+};
+
+export type Story = {
+	entries: Entry[],
+	whole: boolean,
 };
 
 export type Task = {

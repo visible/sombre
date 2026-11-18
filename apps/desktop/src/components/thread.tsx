@@ -535,9 +535,14 @@ const Open = ({
       return;
     }
     try {
-      const entries = await read(agent, id);
-      remember(key, entries, updated);
-      setStory({ entries, state: "ready" });
+      const first = await read(agent, id, false);
+      remember(key, first.entries, updated, first.whole);
+      setStory({ entries: first.entries, state: "ready" });
+      if (!first.whole) {
+        const full = await read(agent, id, true);
+        remember(key, full.entries, updated, true);
+        setStory({ entries: full.entries, state: "ready" });
+      }
     } catch (error) {
       setStory({ message: failure(error), state: "failed" });
     }
