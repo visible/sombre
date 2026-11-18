@@ -355,6 +355,18 @@ const element = (kind, name, text) => {
   return node;
 };
 
+const failure = (text) => {
+  const [headline = "", ...rest] = text
+    .split("\n")
+    .filter((line) => line.trim());
+  const card = element("div", "oops");
+  card.append(element("p", "", headline));
+  for (const line of rest) {
+    card.append(element("p", "detail", line));
+  }
+  return card;
+};
+
 const inline = (parent, text) => {
   let last = 0;
   for (const match of text.matchAll(INLINE)) {
@@ -1437,7 +1449,7 @@ const start = () => {
         busy(false);
         decide(null);
         settle();
-        add(element("p", "oops", message.text));
+        add(failure(message.text));
         break;
       }
       case "printed": {

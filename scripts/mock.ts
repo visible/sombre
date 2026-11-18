@@ -85,6 +85,13 @@ const answer = (message: Message) => {
     }
     return;
   }
+  if (message.text?.includes("refuse")) {
+    push({
+      kind: "failed",
+      text: "Opus 5.5's safeguards flagged this message\nSwitch models with /model and send it again, or rephrase it in a new chat\nLearn more: https://support.claude.com/en/articles/8106465",
+    });
+    return;
+  }
   if (message.text?.includes("approve")) {
     push({
       change: ["-rm -rf build", "+rm -rf target/debug"],

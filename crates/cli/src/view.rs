@@ -1276,15 +1276,49 @@ pub fn note(message: &str) {
 pub fn failed(message: &str) {
     keep(Entry::Failed(message.to_string()));
     gap();
-    for (index, line) in wrap(message, width().saturating_sub(6)).iter().enumerate() {
-        let lead = if index == 0 {
-            bold("✕")
-        } else {
-            " ".to_string()
-        };
-        put(&format!("  {lead} {line}"));
+    for row in failure(message, width()) {
+        put(&row);
     }
     put("");
+}
+
+fn failure(message: &str, columns: usize) -> Vec<String> {
+    let room = columns.saturating_sub(5).max(10);
+    let mut rows = Vec::new();
+    for (index, paragraph) in message
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .enumerate()
+    {
+        let links: Vec<(&str, &str)> = paragraph
+            .split(' ')
+            .filter_map(|word| {
+                let bare = word
+                    .strip_prefix("https://")
+                    .or_else(|| word.strip_prefix("http://"))?;
+                Some((bare, word))
+            })
+            .collect();
+        let shown = links
+            .iter()
+            .fold(paragraph.to_string(), |shown, (bare, url)| {
+                shown.replace(url, bare)
+            });
+        for line in wrap(&shown, room) {
+            let line = links.iter().fold(line, |line, (bare, url)| {
+                line.replace(bare, &link(bare, url))
+            });
+            let lead = if rows.is_empty() {
+                bold("✗")
+            } else {
+                " ".to_string()
+            };
+            let body = if index == 0 { line } else { dim(&line) };
+            rows.push(format!("  {lead} {body}"));
+        }
+    }
+    rows
 }
 
 pub fn done(
@@ -1536,6 +1570,29 @@ mod tests {
         let tiny = footer(&parts, 30);
         assert!(crate::dock::visible(&tiny) <= 29, "{tiny}");
         assert!(tiny.contains("sombre") && tiny.contains('…'));
+    }
+
+    #[test]
+    fn a_failure_leads_with_its_headline_and_hangs_the_rest_beneath() {
+        let styled = failure(
+            "Opus 5.5's safeguards flagged this message\n\nSwitch models with /model and send it again, or rephrase it in a new chat\nLearn more: https://support.claude.com/en/articles/8106465",
+            45,
+        );
+        assert!(
+            styled[5].contains("\u{1b}]8;;https://support.claude.com/en/articles/8106465\u{1b}\\")
+        );
+        let rows: Vec<String> = styled.iter().map(|row| crate::dock::bare(row)).collect();
+        assert_eq!(
+            rows,
+            [
+                "  ✗ Opus 5.5's safeguards flagged this",
+                "    message",
+                "    Switch models with /model and send it",
+                "    again, or rephrase it in a new chat",
+                "    Learn more:",
+                "    support.claude.com/en/articles/8106465",
+            ]
+        );
     }
 
     #[test]

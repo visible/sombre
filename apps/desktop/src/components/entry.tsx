@@ -122,13 +122,23 @@ export const Entry = ({ entry }: Props) => {
       );
     }
     case "failed": {
+      const [headline, ...rest] = entry.text
+        .split("\n")
+        .filter((line) => line.trim());
       return (
-        <p className="text-paper pl-[2ch] [overflow-wrap:anywhere]">
-          <span aria-hidden="true" className="text-ember">
-            ✕{" "}
-          </span>
-          {entry.text}
-        </p>
+        <div className="pl-[2ch] [overflow-wrap:anywhere]">
+          <p className="text-paper pl-[2ch] -indent-[2ch]">
+            <span aria-hidden="true" className="text-ember">
+              ✕{" "}
+            </span>
+            {headline}
+          </p>
+          {rest.map((line) => (
+            <p className="text-fog pl-[2ch]" key={line}>
+              {line}
+            </p>
+          ))}
+        </div>
       );
     }
     case "done": {

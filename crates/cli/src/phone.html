@@ -531,9 +531,20 @@
         color: var(--paper);
         overflow-wrap: anywhere;
       }
-      .oops::before {
+      .oops p {
+        margin: 0;
+      }
+      .oops p:first-child {
+        padding-left: 2ch;
+        text-indent: -2ch;
+      }
+      .oops p:first-child::before {
         content: "✕ ";
         color: var(--ember);
+      }
+      .oops .detail {
+        padding-left: 2ch;
+        color: var(--fog);
       }
       .plan {
         padding-left: 2ch;
