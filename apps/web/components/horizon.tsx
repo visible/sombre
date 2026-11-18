@@ -1,6 +1,5 @@
 "use client";
 
-import { gsap } from "gsap";
 import { useEffect, useRef } from "react";
 
 import { still as reduced } from "@/lib/motion";
@@ -128,7 +127,12 @@ export const Horizon = ({ tone = "paper" }: Props) => {
       }
     };
 
-    const tick = (time: number) => draw(time);
+    const clock = () => performance.now() / 1000;
+    let request = 0;
+    const tick = (time: number) => {
+      draw(time / 1000);
+      request = requestAnimationFrame(tick);
+    };
 
     const wake = () => {
       const on = visible && !still;
@@ -137,9 +141,9 @@ export const Horizon = ({ tone = "paper" }: Props) => {
       }
       running = on;
       if (on) {
-        gsap.ticker.add(tick);
+        request = requestAnimationFrame(tick);
       } else {
-        gsap.ticker.remove(tick);
+        cancelAnimationFrame(request);
       }
     };
 
@@ -164,11 +168,11 @@ export const Horizon = ({ tone = "paper" }: Props) => {
     };
 
     resize();
-    draw(gsap.ticker.time);
+    draw(clock());
 
     const sizes = new ResizeObserver(() => {
       resize();
-      draw(gsap.ticker.time);
+      draw(clock());
     });
     sizes.observe(frame);
 
@@ -176,7 +180,7 @@ export const Horizon = ({ tone = "paper" }: Props) => {
       ([entry]) => {
         visible = entry?.isIntersecting ?? false;
         if (visible && started < 0 && !still) {
-          started = gsap.ticker.time;
+          started = clock();
         }
         wake();
       },
@@ -190,7 +194,7 @@ export const Horizon = ({ tone = "paper" }: Props) => {
     }
 
     return () => {
-      gsap.ticker.remove(tick);
+      cancelAnimationFrame(request);
       sizes.disconnect();
       view.disconnect();
       window.removeEventListener("pointermove", move);

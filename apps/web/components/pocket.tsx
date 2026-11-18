@@ -1,6 +1,5 @@
 "use client";
 
-import { gsap } from "gsap";
 import { usePathname } from "next/navigation";
 import type { RefObject } from "react";
 import { useEffect, useRef, useSyncExternalStore } from "react";
@@ -61,6 +60,11 @@ const Chip = ({ current }: { current: View }) => {
   return null;
 };
 
+const displayed = (selector: string) =>
+  [...document.querySelectorAll<HTMLElement>(selector)].filter(
+    (node) => node.getClientRects().length > 0
+  );
+
 interface WatchProps {
   root: RefObject<HTMLElement | null>;
   dot: RefObject<HTMLSpanElement | null>;
@@ -72,31 +76,34 @@ const Watch = ({ root, dot }: WatchProps) => {
     if (!node) {
       return;
     }
-    const desk = document.querySelector("[data-desk]");
-    const ground = document.querySelector("[data-ground]");
-    const now = Boolean(document.querySelector("[data-pocket]"));
     let away = false;
     let landed = false;
-    const pulse = still()
-      ? null
-      : gsap.to(dot.current, {
-          duration: 1.3,
-          ease: "sine.inOut",
-          opacity: 0,
-          paused: true,
-          repeat: -1,
-          scale: 2.6,
-          yoyo: true,
-        });
+    const pulse =
+      still() || !dot.current
+        ? null
+        : dot.current.animate(
+            [
+              { opacity: 1, transform: "scale(1)" },
+              { opacity: 0, transform: "scale(2.6)" },
+            ],
+            {
+              direction: "alternate",
+              duration: 1300,
+              easing: "cubic-bezier(0.37, 0, 0.63, 1)",
+              iterations: Number.POSITIVE_INFINITY,
+            }
+          );
+    pulse?.pause();
     const sync = () => {
       const shown = away && !landed;
       node.toggleAttribute("data-shown", shown);
       node.inert = !shown;
-      pulse?.paused(!shown);
+      if (shown) {
+        pulse?.play();
+      } else {
+        pulse?.pause();
+      }
     };
-    const sections = [
-      ...document.querySelectorAll<HTMLElement>("[data-session]"),
-    ];
     let top = -1;
     let size = -1;
     const tick = () => {
@@ -108,9 +115,13 @@ const Watch = ({ root, dot }: WatchProps) => {
       top = y;
       size = height;
       const tall = window.innerHeight;
-      away = desk ? desk.getBoundingClientRect().bottom < tall * 0.62 : now;
+      const [desk] = displayed("[data-desk]");
+      const [ground] = displayed("[data-ground]");
+      away = desk
+        ? desk.getBoundingClientRect().bottom < tall * 0.62
+        : displayed("[data-pocket]").length > 0;
       landed = ground ? ground.getBoundingClientRect().top < tall * 0.9 : false;
-      for (const section of sections) {
+      for (const section of displayed("[data-session]")) {
         if (section.getBoundingClientRect().top < tall * 0.58) {
           session.advance(section.dataset.session ?? "");
         }
@@ -126,7 +137,7 @@ const Watch = ({ root, dot }: WatchProps) => {
       grown.disconnect();
       window.removeEventListener("scroll", tick);
       window.removeEventListener("resize", tick);
-      pulse?.kill();
+      pulse?.cancel();
     };
   }, [root, dot]);
   return null;
@@ -148,9 +159,9 @@ export const Pocket = () => {
     if (!state.running) {
       return;
     }
-    const call = gsap.delayedCall(1.7, session.finish);
+    const call = window.setTimeout(session.finish, 1700);
     return () => {
-      call.kill();
+      window.clearTimeout(call);
     };
   }, [state.running]);
 

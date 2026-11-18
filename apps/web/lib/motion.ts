@@ -1,5 +1,3 @@
-import { gsap } from "gsap";
-
 export const ease = {
   in: "power3.in",
   out: "expo.out",
@@ -20,18 +18,33 @@ export const scroll = (target: number | string, instant = false) => {
 
 const stage = () => document.querySelector<HTMLElement>("#stage");
 
+const curve = {
+  in: "cubic-bezier(0.5, 0, 0.75, 0)",
+  out: "cubic-bezier(0.16, 1, 0.3, 1)",
+} as const;
+
+const settle = (node: HTMLElement) => {
+  for (const running of node.getAnimations()) {
+    running.cancel();
+  }
+};
+
 export const leave = async () => {
   const node = stage();
   if (!node) {
     return;
   }
-  await gsap.to(node, {
-    autoAlpha: 0,
-    duration: still() ? 0.12 : 0.32,
-    ease: ease.in,
-    overwrite: true,
-    x: still() ? 0 : -36,
-  });
+  const quick = still();
+  settle(node);
+  const motion = node.animate(
+    [
+      { opacity: 1, transform: "translateX(0)" },
+      { opacity: 0, transform: `translateX(${quick ? 0 : -36}px)` },
+    ],
+    { duration: quick ? 120 : 320, easing: curve.in, fill: "forwards" }
+  );
+  await motion.finished.catch(() => null);
+  node.style.visibility = "hidden";
 };
 
 export const enter = () => {
@@ -39,17 +52,15 @@ export const enter = () => {
   if (!node) {
     return;
   }
-  gsap.fromTo(
-    node,
-    { autoAlpha: 0, x: still() ? 0 : 36 },
-    {
-      autoAlpha: 1,
-      clearProps: "all",
-      duration: still() ? 0.12 : 0.8,
-      ease: ease.out,
-      overwrite: true,
-      x: 0,
-    }
+  const quick = still();
+  settle(node);
+  node.style.visibility = "";
+  node.animate(
+    [
+      { opacity: 0, transform: `translateX(${quick ? 0 : 36}px)` },
+      { opacity: 1, transform: "translateX(0)" },
+    ],
+    { duration: quick ? 120 : 800, easing: curve.out }
   );
 };
 
