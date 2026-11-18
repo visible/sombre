@@ -16,6 +16,7 @@ mod provider;
 mod question;
 mod size;
 mod streak;
+mod title;
 mod view;
 
 use std::env;
@@ -314,6 +315,7 @@ fn pretty(shown: &[&Session], total: usize, time: u64, cwd: &Path) {
 }
 
 fn enter(session: &Session) -> ExitCode {
+    title::set(&session.title);
     chat::open(session).map_or(ExitCode::FAILURE, |engine| {
         chat::run(engine, &transcript(session))
     })

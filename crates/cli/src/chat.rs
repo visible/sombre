@@ -150,6 +150,9 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
     let mut composer = crate::compose::Composer::default();
     resumed(&mut engine, history, roots.as_ref());
     screen(&engine, history);
+    if history.is_empty() {
+        crate::title::set(&view::folder(&engine.cwd));
+    }
     if engine.agent == Agent::Claude && sombre_core::claude::untrusted(&engine.cwd) {
         view::note(
             "this folder's .claude settings and hooks stay off until you open it in claude once and trust it",
@@ -332,6 +335,9 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                 }
                 crate::relay::said(&text, &engine.images);
                 notes.clear();
+                if engine.session.is_none() {
+                    crate::title::set(&text);
+                }
                 let (left, _) = turn(&mut engine, &text, &stop);
                 carried = absorb(left, &mut pending, &mut draft, &mut held);
             }
@@ -448,6 +454,7 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                     view::wipe();
                     screen(&engine, &history);
                     view::note(&format!("back in {}", session.title));
+                    crate::title::set(&session.title);
                 }
             }
             Input::New => {
@@ -455,6 +462,7 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                 engine.session = None;
                 view::wipe();
                 screen(&engine, &[]);
+                crate::title::set(&view::folder(&engine.cwd));
             }
             Input::Current => view::note(&format!(
                 "using {}. /agent claude, /agent codex, or /agent sombre switches",
@@ -543,7 +551,10 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                 if let Some(typed) = typed {
                     match sombre_core::named(&typed) {
                         Ok(name) => match engine.rename(&name) {
-                            Ok(()) => view::note(&format!("renamed to {name}")),
+                            Ok(()) => {
+                                crate::title::set(&name);
+                                view::note(&format!("renamed to {name}"));
+                            }
                             Err(problem) => view::failed(&problem),
                         },
                         Err(problem) => view::note(problem),
@@ -559,6 +570,7 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
             }),
         }
     }
+    crate::title::reset();
     ExitCode::SUCCESS
 }
 
