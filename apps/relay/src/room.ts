@@ -5,13 +5,14 @@ import type { Device } from "./log";
 import {
   KEPT,
   append,
-  over,
   cursor,
   frame,
   hex,
   label,
   machines,
+  over,
   pack,
+  pieces,
   rebuild,
   since,
   strings,
@@ -287,13 +288,12 @@ export class Room extends DurableObject<Env> {
   private phone(device: Device, query: URLSearchParams) {
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], ["phone", device.id]);
-    pair[1].send(
-      JSON.stringify({
-        epoch: this.epoch,
-        mac: this.present(),
-        ...this.window(cursor(query.get("after"), 0)),
-      })
-    );
+    const { items, next } = this.window(cursor(query.get("after"), 0));
+    for (const part of pieces(items, next)) {
+      pair[1].send(
+        JSON.stringify({ epoch: this.epoch, mac: this.present(), ...part })
+      );
+    }
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 

@@ -163,6 +163,27 @@ export const allowed = (stamps: number[], now: number) =>
   stamps.filter((at) => now - at < MINUTES).length < BURST &&
   stamps.filter((at) => now - at < DAY).length < DAILY;
 
+export const PIECE = 8 * 1024 * 1024;
+
+export const pieces = (items: string[], next: number, cap = PIECE) => {
+  const parts: { items: string[]; next: number; more: boolean }[] = [];
+  let part: string[] = [];
+  let size = 0;
+  let through = next - items.length;
+  for (const item of items) {
+    if (part.length > 0 && size + item.length > cap) {
+      parts.push({ items: part, more: true, next: through });
+      part = [];
+      size = 0;
+    }
+    part.push(item);
+    size += item.length;
+    through += 1;
+  }
+  parts.push({ items: part, more: false, next });
+  return parts;
+};
+
 export const BUDGET = 32 * 1024 * 1024;
 
 export const over = (sizes: number[], budget = BUDGET) => {

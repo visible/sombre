@@ -1484,10 +1484,10 @@ const start = () => {
         show(message);
       }
     }
-    if (!state.joined) {
+    if (!(body.more || state.joined)) {
       arrive();
     }
-    state.joined = true;
+    state.joined ||= !body.more;
     state.after = body.next;
     if ("mac" in body) {
       state.away = !body.mac;

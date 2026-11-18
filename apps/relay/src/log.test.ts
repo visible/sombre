@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  pieces,
   BUDGET,
   BURST,
   DAILY,
@@ -166,5 +167,31 @@ describe("new pairings", () => {
     expect(foreign(new Headers({ "Sec-Fetch-Site": "none" }))).toBe(false);
     expect(foreign(new Headers({ "Sec-Fetch-Site": "cross-site" }))).toBe(true);
     expect(foreign(new Headers({ Origin: "https://evil.example" }))).toBe(true);
+  });
+});
+
+describe("history window", () => {
+  test("a big window goes out in pieces a phone can stitch back together", () => {
+    const items = Array.from({ length: 10 }, (_, index) =>
+      `${index}`.padEnd(400, "x")
+    );
+    const parts = pieces(items, 110, 1000);
+    expect(parts.map((part) => part.items.length)).toEqual([2, 2, 2, 2, 2]);
+    expect(parts.map((part) => part.next)).toEqual([102, 104, 106, 108, 110]);
+    expect(parts.map((part) => part.more)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+    ]);
+    expect(parts.flatMap((part) => part.items)).toEqual(items);
+  });
+
+  test("a small or empty window is one piece", () => {
+    expect(pieces(["a", "b"], 2)).toEqual([
+      { items: ["a", "b"], more: false, next: 2 },
+    ]);
+    expect(pieces([], 7)).toEqual([{ items: [], more: false, next: 7 }]);
   });
 });
