@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crossterm::cursor::{MoveToColumn, MoveUp};
@@ -243,6 +244,38 @@ fn loud(original: &Saved) {
 #[cfg(not(unix))]
 fn loud(_: &Saved) {
     let _ = terminal::disable_raw_mode();
+}
+
+static HUSHED: Mutex<Option<Saved>> = Mutex::new(None);
+
+pub struct Hushed;
+
+impl Drop for Hushed {
+    fn drop(&mut self) {
+        aloud();
+    }
+}
+
+pub fn hushed() -> Hushed {
+    hush();
+    Hushed
+}
+
+pub fn hush() {
+    if cfg!(unix)
+        && let Ok(mut held) = HUSHED.lock()
+        && held.is_none()
+    {
+        *held = quiet();
+    }
+}
+
+pub fn aloud() -> bool {
+    let saved = HUSHED.lock().ok().and_then(|mut held| held.take());
+    if let Some(saved) = &saved {
+        loud(saved);
+    }
+    saved.is_some()
 }
 
 pub struct Dock {

@@ -117,7 +117,9 @@ fn run(cli: Cli) -> ExitCode {
         eprintln!("sombre: can't read the current folder");
         return ExitCode::FAILURE;
     };
-    if matches!(cli.command, None | Some(Action::Resume { .. })) {
+    let chatting = matches!(cli.command, None | Some(Action::Resume { .. }));
+    let _hushed = chatting.then(dock::hushed);
+    if chatting {
         relay::lock();
         relay::early();
         update::background();

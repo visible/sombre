@@ -87,10 +87,15 @@ fn run(line: &[String]) -> bool {
     };
     let program = process::find(first).map_or_else(|| first.into(), |path| path.into_os_string());
     crate::pane::release();
-    Command::new(program)
+    let hushed = crate::dock::aloud();
+    let worked = Command::new(program)
         .args(rest)
         .status()
-        .is_ok_and(|status| status.success())
+        .is_ok_and(|status| status.success());
+    if hushed {
+        crate::dock::hush();
+    }
+    worked
 }
 
 pub fn ready(agent: Agent, name: &str) -> bool {
