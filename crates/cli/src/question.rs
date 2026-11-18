@@ -215,6 +215,20 @@ pub fn lines(
 }
 
 fn paint(lines: &[String]) -> usize {
+    if crate::pane::pinned() {
+        let framed: Vec<String> = lines
+            .iter()
+            .map(|line| {
+                if line.is_empty() {
+                    String::new()
+                } else {
+                    format!("  {line}")
+                }
+            })
+            .collect();
+        crate::pane::over(&framed);
+        return lines.len();
+    }
     let mut out = io::stdout();
     for line in lines {
         if line.is_empty() {
@@ -247,7 +261,9 @@ fn ask(agent: &str, id: &str, question: &Question, place: (usize, usize)) -> Ask
             Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => {
                 match press(&mut card, question, key.code, key.modifiers) {
                     Step::Redraw => {
-                        crate::approve::erase(shown);
+                        if !crate::pane::pinned() {
+                            crate::approve::erase(shown);
+                        }
                         shown = paint(&lines(agent, question, &card, place, room()));
                     }
                     Step::Answer(text) => break Asked::Answer(text),
@@ -259,7 +275,11 @@ fn ask(agent: &str, id: &str, question: &Question, place: (usize, usize)) -> Ask
             _ => {}
         }
     };
-    crate::approve::erase(shown);
+    if crate::pane::pinned() {
+        crate::pane::back();
+    } else {
+        crate::approve::erase(shown);
+    }
     asked
 }
 
