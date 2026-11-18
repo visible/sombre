@@ -33,6 +33,7 @@ pub enum Event {
         status: String,
         reason: String,
     },
+    Round(String),
     Approval {
         id: String,
         tool: String,
@@ -108,6 +109,7 @@ impl Event {
                 reason: clean(reason),
                 status,
             },
+            Self::Round(reason) => Self::Round(clean(reason)),
             Self::Approval {
                 id,
                 tool,
@@ -207,6 +209,9 @@ pub fn claude(line: &str) -> Vec<Event> {
                 .filter(|text| !text.is_empty())
                 .map(|text| vec![Event::Delta(text.to_string())])
                 .unwrap_or_default()
+        }
+        Some("user") if feedback(&entry).is_some() => {
+            feedback(&entry).map(Event::Round).into_iter().collect()
         }
         Some("user") => result(&entry),
         Some("assistant") if entry["is_api_error_message"] == true => Vec::new(),
@@ -373,6 +378,23 @@ pub fn halt(id: &str) -> String {
             "interrupt": true
         }),
     )
+}
+
+fn feedback(entry: &Value) -> Option<String> {
+    let content = &entry["message"]["content"];
+    let text = content.as_str().or_else(|| {
+        content
+            .as_array()?
+            .iter()
+            .find(|block| block["type"] == "text")?["text"]
+            .as_str()
+    })?;
+    let rest = text.strip_prefix("Stop hook feedback:")?.trim();
+    let reason = rest
+        .strip_prefix('[')
+        .and_then(|inside| inside.split_once("]:"))
+        .map_or(rest, |(_, reason)| reason);
+    Some(reason.trim().to_string())
 }
 
 fn result(entry: &Value) -> Vec<Event> {
@@ -892,6 +914,21 @@ mod tests {
                 r#"{"type":"result","subtype":"error_during_execution","is_error":true,"result":""}"#
             ),
             vec![Event::Failed("the turn failed".to_string())]
+        );
+    }
+
+    #[test]
+    fn claude_says_when_its_goal_sends_it_back_for_another_round() {
+        let line = r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Stop hook feedback:\n[proof.txt holds the word banana]: proof.txt doesn't exist yet, so the goal isn't met"}]},"session_id":"s1"}"#;
+        assert_eq!(
+            claude(line),
+            vec![Event::Round(
+                "proof.txt doesn't exist yet, so the goal isn't met".to_string()
+            )]
+        );
+        assert!(
+            claude(r#"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"fix the build"}]}}"#)
+                .is_empty()
         );
     }
 

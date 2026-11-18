@@ -8,6 +8,7 @@ pub struct Outcome {
     pub steps: usize,
     pub said: String,
     pub goal: Option<(String, String)>,
+    pub limited: bool,
 }
 
 pub const TURNS: usize = 20;
@@ -83,7 +84,9 @@ impl Goal {
     }
 
     pub fn native(&mut self, outcome: &Outcome, failing: impl FnOnce() -> Option<String>) {
-        self.status = if outcome.stopped || outcome.refused {
+        self.status = if outcome.limited {
+            Status::Limit
+        } else if outcome.stopped || outcome.refused {
             Status::Paused
         } else if outcome.failed {
             Status::Blocked("the last turn failed".to_string())
@@ -227,6 +230,25 @@ mod tests {
             steps,
             ..Outcome::default()
         }
+    }
+
+    #[test]
+    fn a_native_goal_that_runs_past_its_turns_stops_and_can_resume() {
+        let mut goal = Goal::new("proof.txt holds banana".to_string());
+        goal.turns = TURNS;
+        goal.native(
+            &Outcome {
+                limited: true,
+                stopped: true,
+                ..Outcome::default()
+            },
+            || Some("never runs".to_string()),
+        );
+        assert_eq!(goal.status, Status::Limit);
+        assert_eq!(
+            goal.summary(),
+            format!("goal stopped after {TURNS} turns. /goal resume keeps going")
+        );
     }
 
     #[test]

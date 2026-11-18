@@ -164,6 +164,7 @@ pub enum Pass {
     Failed(String),
     Halted,
     Goal(String, String),
+    Round,
 }
 
 pub struct Gate {
@@ -252,6 +253,7 @@ impl Gate {
             Event::Note(text) => Pass::Show(Update::Note { text }),
             Event::Prompt(_) => Pass::Skip,
             Event::Goal { status, reason } => Pass::Goal(status, reason),
+            Event::Round(_) => Pass::Round,
             Event::Text(_)
             | Event::Delta(_)
             | Event::Step { .. }
@@ -774,7 +776,7 @@ impl Runner {
             if outcome.refused {
                 self.engine.pause();
             }
-            current.turns += self.engine.rounds();
+            current.turns += self.engine.rounds().min(goal::TURNS);
             let round = current.turns;
             let mut stopped = false;
             current.native(&outcome, || match self.verify(&objective, round) {
@@ -817,6 +819,10 @@ impl Runner {
         });
         let going = current.status == Status::Active;
         self.goal = Some(current);
+        if outcome.limited && self.engine.agent == Agent::Claude {
+            self.send("/goal clear");
+            return self.busy;
+        }
         match next {
             Some(prompt) if going => {
                 self.send(&prompt);
@@ -936,6 +942,15 @@ impl Runner {
         Ok(said.join("\n"))
     }
 
+    fn capped(&self) -> bool {
+        self.engine.native()
+            && self.engine.rounds() > goal::TURNS
+            && self
+                .goal
+                .as_ref()
+                .is_some_and(|current| current.status == Status::Active)
+    }
+
     fn pump(&mut self) {
         match self.engine.next(Duration::from_millis(40)) {
             Next::Idle => {}
@@ -951,6 +966,11 @@ impl Runner {
                     .to_string();
                 self.emit(Update::Failed { text: reason });
                 self.gate.outcome.failed = true;
+                self.ended();
+            }
+            Next::Events(_) if self.capped() => {
+                self.engine.stop();
+                self.gate.outcome.limited = true;
                 self.ended();
             }
             Next::Events(events) => {
@@ -1036,6 +1056,12 @@ impl Runner {
                 self.ended();
             }
             Pass::Goal(..) => {}
+            Pass::Round => self.note(format!(
+                "turn {} of {}, {} keeps going on the goal",
+                self.engine.rounds(),
+                goal::TURNS,
+                self.engine.name()
+            )),
         }
     }
 

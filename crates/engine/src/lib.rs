@@ -57,6 +57,7 @@ pub struct Engine {
     server: Option<Server>,
     told: Option<Mode>,
     woke: Arc<AtomicUsize>,
+    rounds: usize,
 }
 
 impl Engine {
@@ -87,6 +88,7 @@ impl Engine {
             told: None,
             turn: None,
             woke: Arc::new(AtomicUsize::new(0)),
+            rounds: 0,
         }
     }
 
@@ -107,6 +109,7 @@ impl Engine {
     }
 
     pub fn send(&mut self, text: &str) -> io::Result<()> {
+        self.rounds = 0;
         let images = std::mem::take(&mut self.images);
         let paths: Vec<String> = images
             .iter()
@@ -265,7 +268,9 @@ impl Engine {
     }
 
     pub fn rounds(&self) -> usize {
-        self.server.as_ref().map_or(1, |server| server.turns.max(1))
+        self.server
+            .as_ref()
+            .map_or(self.rounds + 1, |server| server.turns.max(1))
     }
 
     pub fn pause(&mut self) {
@@ -415,7 +420,14 @@ impl Engine {
                 }
                 let events = match (self.agent, self.server.as_mut()) {
                     (_, Some(server)) => server.read(&line),
-                    (Agent::Claude, None) => event::claude(&line),
+                    (Agent::Claude, None) => {
+                        let events = event::claude(&line);
+                        self.rounds += events
+                            .iter()
+                            .filter(|item| matches!(item, Event::Round(_)))
+                            .count();
+                        events
+                    }
                     (Agent::Codex | Agent::Sombre, None) => Vec::new(),
                 };
                 if self.flush().is_err() {

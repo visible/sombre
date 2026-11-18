@@ -706,12 +706,15 @@ fn chase(engine: &mut Engine, current: &mut Goal, stop: &AtomicBool, first: bool
         if outcome.refused {
             engine.pause();
         }
-        current.turns += engine.rounds();
+        current.turns += engine.rounds().min(goal::TURNS);
         let objective = current.objective.clone();
         current.native(&outcome, || {
             verify(&objective, &engine.cwd, stop, engine.mode != Mode::Yolo)
                 .map(|(command, _)| command)
         });
+        if outcome.limited && engine.agent == Agent::Claude {
+            let _ = turn(engine, "/goal clear", stop);
+        }
         view::note(&progress(current, outcome.stopped));
         return left;
     }
@@ -1709,6 +1712,10 @@ fn watch(engine: &mut Engine, stop: &AtomicBool, owned: bool) -> (Draft, Outcome
     (left, outcome)
 }
 
+fn capped(engine: &Engine) -> bool {
+    AIMING.load(Ordering::SeqCst) && engine.native() && engine.rounds() > goal::TURNS
+}
+
 fn pump(
     engine: &mut Engine,
     stop: &AtomicBool,
@@ -1839,6 +1846,15 @@ fn pump(
             }
             Next::Events(events) => events,
         };
+        if capped(engine) {
+            dock.hide();
+            streak.settle(false, &engine.cwd);
+            final_plan(&mut latest, &engine.cwd);
+            prose.finish();
+            engine.stop();
+            outcome.limited = true;
+            return false;
+        }
         for item in events {
             let item = item.scrubbed();
             if ours {
@@ -1854,6 +1870,7 @@ fn pump(
                 | Event::Model(_)
                 | Event::Echo
                 | Event::Prompt(_)
+                | Event::Round(_)
                 | Event::Goal { .. } => None,
                 Event::Output { id, .. } | Event::Patch { id, .. } => {
                     Some(last.as_deref() == Some(id.as_str()))
@@ -1930,6 +1947,12 @@ fn pump(
                 Event::Goal { status, reason } => {
                     outcome.goal = Some((status, reason));
                 }
+                Event::Round(_) => view::note(&format!(
+                    "turn {} of {}, {} keeps going on the goal",
+                    engine.rounds(),
+                    goal::TURNS,
+                    engine.name()
+                )),
                 Event::Approval { ref id, .. } => {
                     if long(started) {
                         view::notify(&format!("{} needs your approval", engine.name()));
