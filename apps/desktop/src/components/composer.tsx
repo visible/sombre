@@ -7,7 +7,7 @@ import type { Agent, Folder, Mode, Model, Picture } from "../lib/api";
 import { failure, keep as save, models, modes, picture } from "../lib/api";
 import type { Name } from "../lib/commands";
 import { parse, suggest } from "../lib/commands";
-import { encode, pictures } from "../lib/format";
+import { encode, pictures, short } from "../lib/format";
 import type { Live } from "../lib/live";
 import { seconds, waiting } from "../lib/live";
 import { draft, halt, hurry, keep, note, unqueue } from "../lib/store";
@@ -402,7 +402,7 @@ export const Composer = ({
         steer={steer}
       />
       <div
-        className={`bg-raise relative rounded-2xl border transition-colors ${dropping ? "border-ember/70" : "border-rim focus-within:border-edge"}`}
+        className={`bg-raise shadow-lift relative rounded-2xl border transition-colors motion-reduce:transition-none ${dropping ? "border-ember/70" : "border-rim focus-within:border-edge"}`}
       >
         {shown ? (
           <Slash
@@ -426,7 +426,7 @@ export const Composer = ({
           message
         </label>
         <textarea
-          className="text-paper placeholder:text-fog block [field-sizing:content] max-h-60 min-h-[52px] w-full resize-none bg-transparent px-4 pt-3.5 pb-1 leading-[1.5] outline-none focus-visible:outline-none disabled:opacity-50"
+          className="text-paper placeholder:text-fog block [field-sizing:content] max-h-60 min-h-[56px] w-full resize-none bg-transparent px-4 pt-4 pb-1 font-sans text-[15px] leading-[1.55] outline-none focus-visible:outline-none disabled:opacity-50"
           disabled={!ready}
           id={`${chatKey}-message`}
           onChange={(event) => {
@@ -442,7 +442,7 @@ export const Composer = ({
           spellCheck={false}
           value={text}
         />
-        <div className="flex items-center gap-0.5 px-2 pb-2">
+        <div className="flex items-center gap-1 px-2.5 pt-1 pb-2.5">
           <button
             aria-label="add images"
             className={`${chip} px-1.5`}
@@ -471,7 +471,7 @@ export const Composer = ({
             trigger={
               <>
                 <span className="max-w-40 truncate">
-                  {model ?? "default model"}
+                  {model ? short(model) : "default model"}
                 </span>
                 {effort ? <span className="text-fog">{effort}</span> : null}
               </>
@@ -527,7 +527,7 @@ export const Composer = ({
             {live.busy && empty ? (
               <button
                 aria-label="stop"
-                className="border-rim text-paper hover:border-fog active:bg-well flex size-8 cursor-pointer items-center justify-center rounded-lg border"
+                className="border-rim text-paper hover:border-fog active:bg-well flex size-8 cursor-pointer items-center justify-center rounded-full border"
                 onClick={() => halt(chatKey)}
                 type="button"
               >
@@ -543,7 +543,7 @@ export const Composer = ({
             ) : (
               <button
                 aria-label={live.busy ? "queue" : "send"}
-                className="bg-ember text-ink flex size-8 cursor-pointer items-center justify-center rounded-lg hover:brightness-110 active:brightness-95 disabled:cursor-default disabled:opacity-30 disabled:hover:brightness-100"
+                className="bg-ember text-ink flex size-8 cursor-pointer items-center justify-center rounded-full hover:brightness-110 active:brightness-95 disabled:cursor-default disabled:opacity-30 disabled:hover:brightness-100"
                 disabled={empty || !ready}
                 onClick={submit}
                 type="button"

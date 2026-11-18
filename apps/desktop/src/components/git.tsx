@@ -168,7 +168,7 @@ export const Git = ({ folder, version, compact }: Props) => {
     <>
       <Popover
         align="end"
-        className="text-fog hover:bg-raise hover:text-paper active:bg-well aria-expanded:bg-raise aria-expanded:text-paper flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-2"
+        className="border-rim text-fog hover:border-edge hover:text-paper active:bg-well aria-expanded:border-edge aria-expanded:text-paper flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 font-mono text-[12px]"
         disabled={doing !== null}
         label={`git: ${about}`}
         side="bottom"

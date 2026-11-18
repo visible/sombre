@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import type { Agent } from "../lib/api";
 import { agents, names } from "../lib/api";
 import type { Target } from "../lib/feed";
-import { money } from "../lib/format";
 import type { Live } from "../lib/live";
 import { mac, shortcut } from "../lib/platform";
 import { useWidth } from "../lib/width";
@@ -47,14 +46,14 @@ const Handset = ({
     aria-label={
       phoned ? "pair a phone, a phone follows this chat" : "pair a phone"
     }
-    className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-7 cursor-pointer items-center gap-1 rounded-lg px-2"
+    className="text-fog hover:bg-raise hover:text-paper active:bg-well focus-visible:text-paper relative flex size-8 cursor-pointer items-center justify-center rounded-lg disabled:cursor-default disabled:opacity-40"
     onClick={onPress}
     title={phoned ? "a phone follows this chat" : "pair a phone"}
     type="button"
   >
     <svg
       aria-hidden="true"
-      className="size-3.5"
+      className="size-4"
       fill="none"
       stroke="currentColor"
       strokeLinecap="round"
@@ -68,7 +67,7 @@ const Handset = ({
     {phoned ? (
       <span
         aria-hidden="true"
-        className="bg-ember size-1.5 shrink-0 rounded-full"
+        className="bg-ember absolute top-1.5 right-1.5 size-1.5 rounded-full"
       />
     ) : null}
   </button>
@@ -106,7 +105,6 @@ export const Header = ({
   const [name, setName] = useState(target.title);
   const field = useRef<HTMLInputElement>(null);
   const [width, bar] = useWidth<HTMLElement>();
-  const labels = width >= 600;
   const roomy = width >= 520;
   const started = target.id !== null || live.session !== null;
 
@@ -122,8 +120,6 @@ export const Header = ({
       chores.rename(name.trim());
     }
   };
-
-  const spent = money(live.cost);
 
   return (
     <header
@@ -143,19 +139,23 @@ export const Header = ({
         </button>
       ) : null}
       <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-1">
-        <span className="text-fog flex shrink-0 items-center gap-1.5 text-[12.5px]">
-          <Logo agent={target.agent} />
+        <span className="text-fog flex shrink-0 items-center gap-2 font-sans text-[13px]">
+          <span className="opacity-70">
+            <Logo agent={target.agent} />
+          </span>
           {width >= 440 ? (
             <span className="max-w-48 truncate">
               {target.folder?.project ?? names[target.agent]}
             </span>
           ) : null}
-          <span aria-hidden="true">/</span>
+          <span aria-hidden="true" className="text-edge">
+            /
+          </span>
         </span>
         {editing ? (
           <input
             aria-label="rename this chat"
-            className="border-edge bg-well text-paper h-7 min-w-0 flex-1 rounded-md border px-2 text-[13px] font-semibold outline-none"
+            className="border-edge bg-well text-paper h-8 min-w-0 flex-1 rounded-lg border px-2 font-sans text-[13.5px] font-medium outline-none"
             onBlur={commit}
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {
@@ -172,7 +172,7 @@ export const Header = ({
         ) : (
           <Popover
             align="start"
-            className="text-paper hover:bg-raise aria-expanded:bg-raise flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[13px] font-semibold"
+            className="text-paper hover:bg-raise aria-expanded:bg-raise active:bg-well flex h-8 min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-2 font-sans text-[13.5px] font-medium disabled:cursor-default disabled:hover:bg-transparent"
             disabled={!started}
             label="chat actions"
             side="bottom"
@@ -256,51 +256,51 @@ export const Header = ({
           </Popover>
         )}
       </div>
-      <div className="text-fog flex shrink-0 items-center gap-3 text-[12px]">
-        {spent && roomy ? (
-          <span title="spent in this chat since sombre opened it">{spent}</span>
-        ) : null}
+      <div className="text-fog flex shrink-0 items-center gap-1 text-[12px]">
         {target.folder && started ? (
-          <Git compact={!roomy} folder={target.folder.path} version={version} />
+          <>
+            <Git
+              compact={!roomy}
+              folder={target.folder.path}
+              version={version}
+            />
+            <span aria-hidden="true" className="bg-rim mx-1.5 h-4 w-px" />
+          </>
         ) : null}
         {onOpen ? (
           <button
             aria-label="open in your editor"
-            className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-7 cursor-pointer items-center rounded-lg px-2"
+            className="text-fog hover:bg-raise hover:text-paper active:bg-well focus-visible:text-paper flex size-8 cursor-pointer items-center justify-center rounded-lg disabled:cursor-default disabled:opacity-40"
             onClick={onOpen}
             title="open this folder in your editor"
             type="button"
           >
-            {labels ? (
-              <span aria-hidden="true">open</span>
-            ) : (
-              <svg
-                aria-hidden="true"
-                className="size-3.5"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.4"
-                viewBox="0 0 16 16"
-              >
-                <path d="M9.5 2.5h4v4M13.5 2.5 8 8M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" />
-              </svg>
-            )}
+            <svg
+              aria-hidden="true"
+              className="size-4"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.4"
+              viewBox="0 0 16 16"
+            >
+              <path d="M9.5 2.5h4v4M13.5 2.5 8 8M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" />
+            </svg>
           </button>
         ) : null}
         {onPhone ? <Handset onPress={onPhone} phoned={phoned} /> : null}
         {onTerminal ? (
           <button
             aria-label="terminal"
-            className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-7 cursor-pointer items-center rounded-lg px-2"
+            className="text-fog hover:bg-raise hover:text-paper active:bg-well focus-visible:text-paper flex size-8 cursor-pointer items-center justify-center rounded-lg disabled:cursor-default disabled:opacity-40"
             onClick={onTerminal}
             title="terminal ⌃`"
             type="button"
           >
             <svg
               aria-hidden="true"
-              className="size-3.5"
+              className="size-4"
               fill="none"
               stroke="currentColor"
               strokeLinecap="round"
@@ -316,14 +316,14 @@ export const Header = ({
           <button
             aria-label="changes"
             aria-pressed={reviewing}
-            className="text-fog hover:bg-raise hover:text-paper active:bg-well aria-pressed:bg-raise aria-pressed:text-paper flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2"
+            className="text-fog hover:bg-raise hover:text-paper active:bg-well focus-visible:text-paper aria-pressed:bg-raise aria-pressed:text-paper flex size-8 cursor-pointer items-center justify-center rounded-lg disabled:cursor-default disabled:opacity-40"
             onClick={onReview}
             title={`changes ${shortcut("d", true)}`}
             type="button"
           >
             <svg
               aria-hidden="true"
-              className="size-3.5"
+              className="size-4"
               fill="none"
               stroke="currentColor"
               strokeLinecap="round"
@@ -332,7 +332,6 @@ export const Header = ({
             >
               <path d="M5 2.5v6M2 5.5h6M9 12.5h5" />
             </svg>
-            {labels ? <span aria-hidden="true">changes</span> : null}
           </button>
         ) : null}
       </div>
