@@ -289,6 +289,26 @@ pub(crate) fn explain(text: &str, code: Option<&str>) -> String {
         .ok()
         .and_then(|body| body["error"]["message"].as_str().map(str::to_string))
         .unwrap_or_else(|| plain.to_string());
+    if let Some((model, _)) = plain
+        .split_once("'s safeguards flagged")
+        .filter(|(model, _)| !model.is_empty() && !model.contains('\n'))
+    {
+        let more = plain
+            .lines()
+            .find_map(|line| line.strip_prefix("Learn more: "))
+            .map(|url| format!("\nLearn more: {url}"))
+            .unwrap_or_default();
+        return format!(
+            "{model}'s safeguards flagged this message\nSwitch models with /model and send it again, or rephrase it in a new chat{more}"
+        );
+    }
+    let plain = plain
+        .lines()
+        .filter(|line| !line.starts_with("Request ID: ") && !line.starts_with("Message ID: "))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string();
     match code {
         Some("model_not_available") => format!("{plain} Pick another model to keep going."),
         _ if plain.starts_with("Not logged in") => {
@@ -1007,6 +1027,35 @@ mod tests {
                 "Claude Code isn't signed in. Run claude in a terminal and sign in, then send this again."
                     .to_string()
             )]
+        );
+    }
+
+    #[test]
+    fn a_refusal_says_what_happened_and_what_to_do_in_three_lines() {
+        let line = json!({
+            "type": "result",
+            "subtype": "success",
+            "is_error": true,
+            "result": "API Error: Opus 5.5's safeguards flagged this session (https://www.anthropic.com/legal/aup). You may be seeing this for the first time: Opus 5.5 is more capable and has stronger safeguards as a result, which can sometimes flag non-cybersecurity work. We're improving these safeguards to reduce the amount of incorrectly flagged messages. Claude Code can't respond to your last message with Opus 5.5.\n\nTry rephrasing the request in a new session or change your model.\n\nLearn more: https://support.claude.com/en/articles/8106465\n\nDetails: `[cyber]`\n\nRequest ID: req_011ChA7bbQwqdiccAEaWm6qx\n\nMessage ID: msg_011ChA7bbmH4TDWC7rTHkUiR",
+        })
+        .to_string();
+        assert_eq!(
+            claude(&line),
+            vec![Event::Failed(
+                "Opus 5.5's safeguards flagged this message\nSwitch models with /model and send it again, or rephrase it in a new chat\nLearn more: https://support.claude.com/en/articles/8106465"
+                    .to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn api_errors_drop_their_request_and_message_ids() {
+        assert_eq!(
+            explain(
+                "API Error: 500 Something broke on our side.\n\nRequest ID: req_1\n\nMessage ID: msg_1",
+                None
+            ),
+            "Something broke on our side."
         );
     }
 

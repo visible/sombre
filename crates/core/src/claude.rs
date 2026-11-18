@@ -752,6 +752,29 @@ mod tests {
     }
 
     #[test]
+    fn reopened_chats_show_a_refusal_in_three_short_lines() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let path = write(
+            dir.path(),
+            "r.jsonl",
+            &[
+                r#"{"type":"user","cwd":"/w","message":{"role":"user","content":"can you try"}}"#,
+                r#"{"type":"assistant","isApiErrorMessage":true,"error":"invalid_request","refusingModel":"claude-opus-5-5","message":{"model":"<synthetic>","role":"assistant","stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber","explanation":"Cyber safeguards flagged this message."},"content":[{"type":"text","text":"API Error: Opus 5.5's safeguards flagged this session (https://www.anthropic.com/legal/aup). Claude Code can't respond to your last message with Opus 5.5.\n\nTry rephrasing the request in a new session or change your model.\n\nLearn more: https://support.claude.com/en/articles/8106465\n\nDetails: `[cyber]`\n\nRequest ID: req_011ChA7bbQwqdiccAEaWm6qx\n\nMessage ID: msg_011ChA7bbmH4TDWC7rTHkUiR"}]}}"#,
+            ],
+        );
+        assert_eq!(
+            transcript(&path),
+            vec![
+                Event::Prompt("can you try".to_string()),
+                Event::Failed(
+                    "Opus 5.5's safeguards flagged this message\nSwitch models with /model and send it again, or rephrase it in a new chat\nLearn more: https://support.claude.com/en/articles/8106465"
+                        .to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
     fn reads_the_timeline_with_tool_output() {
         let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
         let path = write(
