@@ -1683,7 +1683,14 @@ fn watch(engine: &mut Engine, stop: &AtomicBool, owned: bool) -> (Draft, Outcome
     let mut dock = Dock::open(steer, footer(engine), models);
     let mut prose = view::Prose::default();
     let mut outcome = Outcome::default();
+    let teed = view::teeing();
+    if teed && let Some(text) = view::untee() {
+        crate::relay::post(&serde_json::json!({"kind": "printed", "text": text}));
+    }
     let stopped = pump(engine, stop, &mut dock, &mut prose, &mut outcome, owned);
+    if teed {
+        view::tee();
+    }
     outcome.stopped = stopped;
     dock.hide();
     prose.finish();

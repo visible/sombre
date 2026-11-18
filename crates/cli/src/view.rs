@@ -87,6 +87,10 @@ pub fn tee() {
     TEE.store(kept, Ordering::Relaxed);
 }
 
+pub fn teeing() -> bool {
+    TEE.load(Ordering::Relaxed) != usize::MAX
+}
+
 pub fn untee() -> Option<String> {
     let mark = TEE.swap(usize::MAX, Ordering::Relaxed);
     let added: Vec<Entry> = STORY
