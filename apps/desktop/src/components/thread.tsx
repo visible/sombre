@@ -66,13 +66,17 @@ import { Home } from "./home";
 import { Notice } from "./notice";
 import { Phone } from "./phone";
 import { Questions } from "./questions";
-import { Review } from "./review";
 import { Start } from "./start";
 import { Work } from "./work";
 
 const Drawer = lazy(async () => {
   const loaded = await import("./drawer");
   return { default: loaded.Drawer };
+});
+
+const Review = lazy(async () => {
+  const loaded = await import("./review");
+  return { default: loaded.Review };
 });
 
 type Story =
@@ -842,20 +846,22 @@ const Open = ({
         ) : null}
       </div>
       {shown ? (
-        <Review
-          focus={shown.focus}
-          folder={shown.place}
-          hidden={hidden}
-          latest={latest}
-          overlay={room < 760}
-          onClose={close}
-          onOpen={(path) => {
-            launch(`${shown.place}/${path}`, settings?.editor ?? null);
-          }}
-          onScope={(scope) => show(scope, null)}
-          scope={shown.scope}
-          version={version}
-        />
+        <Suspense fallback={null}>
+          <Review
+            focus={shown.focus}
+            folder={shown.place}
+            hidden={hidden}
+            latest={latest}
+            overlay={room < 760}
+            onClose={close}
+            onOpen={(path) => {
+              launch(`${shown.place}/${path}`, settings?.editor ?? null);
+            }}
+            onScope={(scope) => show(scope, null)}
+            scope={shown.scope}
+            version={version}
+          />
+        </Suspense>
       ) : null}
     </main>
   );

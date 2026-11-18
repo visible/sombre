@@ -1,12 +1,18 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { Controls } from "./components/controls";
 import { Logo } from "./components/logo";
 import type { Entry } from "./components/palette";
 import { Palette } from "./components/palette";
 import { Resizer } from "./components/resizer";
-import { Preferences } from "./components/settings";
 import type { Actions, Listing } from "./components/sidebar";
 import { Sidebar } from "./components/sidebar";
 import type { Tasks } from "./components/thread";
@@ -51,6 +57,11 @@ import {
 import { toast } from "./lib/toasts";
 import { useTrail } from "./lib/trail";
 import { useZoom } from "./lib/zoom";
+
+const Preferences = lazy(async () => {
+  const loaded = await import("./components/settings");
+  return { default: loaded.Preferences };
+});
 
 let resumed = false;
 
@@ -523,20 +534,22 @@ export const App = () => {
         </div>
       )}
       {view === "settings" ? (
-        <Preferences
-          chats={all}
-          installed={installed}
-          onChange={configureWith}
-          onClose={() => setView("chat")}
-          onEdit={edit}
-          onPrefs={setPrefs}
-          onReveal={(path) => tasks.reveal(path)}
-          prefs={prefs}
-          problem={problem}
-          section={section}
-          settings={settings}
-          width={prefs.width}
-        />
+        <Suspense fallback={null}>
+          <Preferences
+            chats={all}
+            installed={installed}
+            onChange={configureWith}
+            onClose={() => setView("chat")}
+            onEdit={edit}
+            onPrefs={setPrefs}
+            onReveal={(path) => tasks.reveal(path)}
+            prefs={prefs}
+            problem={problem}
+            section={section}
+            settings={settings}
+            width={prefs.width}
+          />
+        </Suspense>
       ) : (
         <Thread
           folders={folders}
