@@ -15,7 +15,7 @@ export interface Prefs {
   snoozed: Record<string, number>;
   shelves: string[];
   only: string[];
-  grouped: boolean;
+  flat: boolean;
 }
 
 export interface Project {
@@ -50,8 +50,8 @@ export const widen = (value: number) =>
 
 export const blank: Prefs = {
   archived: [],
+  flat: false,
   folded: [],
-  grouped: false,
   hidden: false,
   only: [],
   opened: [],
@@ -76,8 +76,8 @@ export const parse = (raw: string | null): Prefs => {
     const field = (name: string): unknown => Reflect.get(value, name);
     return {
       archived: strings(field("archived")),
+      flat: field("flat") === true,
       folded: strings(field("folded")),
-      grouped: field("grouped") === true,
       hidden: field("hidden") === true,
       only: strings(field("only")),
       opened: strings(field("opened")),

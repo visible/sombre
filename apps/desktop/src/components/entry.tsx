@@ -22,10 +22,10 @@ const Prompt = ({
   const [open, setOpen] = useState(false);
   const clamped = long && !open;
   return (
-    <div className="text-paper mt-3.5 grid grid-cols-[2ch_minmax(0,1fr)] first:mt-0">
-      <span aria-hidden="true" className="text-ember">
-        {steered ? "↳" : "❯"}
-      </span>
+    <div
+      className={`text-paper bg-raise mt-3.5 rounded-r-lg border-l-2 py-2.5 pr-4 pl-4 font-sans text-[15px] leading-[1.6] first:mt-0 ${steered ? "border-fog/50 border-dashed" : "border-ember"}`}
+    >
+      {steered ? <span className="sr-only">sent while it worked: </span> : null}
       <div className="flex min-w-0 flex-col items-start">
         <p
           className={`[overflow-wrap:anywhere] whitespace-pre-wrap ${clamped ? "max-h-56 overflow-hidden [mask-image:linear-gradient(to_bottom,black_70%,transparent)]" : ""}`}
@@ -81,9 +81,9 @@ export const Entry = ({ entry }: Props) => {
     case "plan": {
       return (
         <section className="pl-[2ch]">
-          <p className="text-paper mb-1 font-semibold">
-            <span aria-hidden="true" className="text-ember">
-              ■{" "}
+          <p className="text-paper mb-1">
+            <span aria-hidden="true" className="text-fog">
+              ●{" "}
             </span>
             plan
           </p>

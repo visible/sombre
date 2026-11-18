@@ -7,10 +7,12 @@
   --color-rim: #272a2c;
   --color-edge: #3a3e41;
   --color-paper: #edefef;
-  --color-body: #c3c8ca;
+  --color-body: #d2d6d8;
   --color-fog: #9aa0a3;
   --color-ember: #ff5b14;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --shadow-lift: 0 14px 40px -18px rgb(0 0 0 / 0.75);
   --animate-appear: appear 160ms ease-out both;
   --animate-pop: appear 90ms ease-out both;
   --animate-late: appear 160ms ease-out 200ms both;

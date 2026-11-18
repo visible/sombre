@@ -52,9 +52,12 @@ export const Home = ({
 
   return (
     <div className="flex flex-col items-center gap-4 px-6 text-center">
-      <Mark className="text-ember h-6 w-10" />
-      <h2 className="text-paper flex flex-wrap items-baseline justify-center gap-x-[1ch] text-[19px]">
-        <span>what should we build in</span>
+      <Mark className="text-ember mb-1 h-6 w-10" />
+      <h2 className="text-paper text-[22px] leading-snug">
+        what should we work on?
+      </h2>
+      <div className="text-fog flex flex-wrap items-center justify-center gap-x-[1ch] gap-y-2">
+        <span>in</span>
         <span className="whitespace-nowrap">
           <Popover
             align="start"
@@ -99,9 +102,8 @@ export const Home = ({
               </>
             )}
           </Popover>
-          ?
         </span>
-      </h2>
+      </div>
       <fieldset className="border-rim flex rounded-xl border p-0.5">
         <legend className="sr-only">agent</legend>
         {agents.map((option) => (

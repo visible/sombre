@@ -24,10 +24,13 @@ const Row = ({ step }: Props) => {
 
   return (
     <div className="grid grid-cols-[1ch_auto_minmax(0,1fr)] gap-x-[1ch]">
-      <span aria-hidden="true" className="text-ember">
-        {step.failed ? "✕" : "■"}
+      <span
+        aria-hidden="true"
+        className={step.failed ? "text-ember" : "text-fog"}
+      >
+        {step.failed ? "✕" : "●"}
       </span>
-      <span className="text-paper min-w-[4ch] font-semibold">{step.label}</span>
+      <span className="text-body min-w-[4ch]">{step.label}</span>
       {step.detail || more ? (
         <button
           aria-expanded={open}

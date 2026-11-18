@@ -19,7 +19,7 @@ const Inline = ({ spans }: { spans: Span[] }) =>
       case "code": {
         return (
           <code
-            className="bg-raise text-paper rounded-[3px] px-[3px] text-[13px]"
+            className="bg-raise text-paper rounded-[3px] px-[3px] font-mono text-[13px]"
             key={span.key}
           >
             {span.text}
@@ -97,7 +97,7 @@ const Part = ({ block }: { block: Block }) => {
               {block.language}
             </figcaption>
           ) : null}
-          <pre className="border-rim text-paper overflow-x-auto border-l py-0.5 pr-14 pl-3 text-[13px]">
+          <pre className="border-rim text-paper overflow-x-auto border-l py-0.5 pr-14 pl-3 font-mono text-[13px] leading-[1.6]">
             <code>{block.text}</code>
           </pre>
           <Copy
@@ -179,7 +179,7 @@ interface Props {
 const Prose = ({ text }: Props) => {
   const blocks = useMemo(() => markdown(text), [text]);
   return (
-    <div className="flex flex-col gap-3 pl-[2ch] [overflow-wrap:anywhere]">
+    <div className="flex flex-col gap-3 pl-[2ch] font-sans text-[15px] leading-[1.7] [overflow-wrap:anywhere]">
       {blocks.map((block) => (
         <Part block={block} key={block.key} />
       ))}

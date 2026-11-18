@@ -26,7 +26,7 @@ import {
   short,
   toggle,
 } from "../lib/sidebar";
-import { keyOf, seenAt, useMarks, useSeen } from "../lib/store";
+import { keyOf, prefetch, seenAt, useMarks, useSeen } from "../lib/store";
 import { Logo } from "./logo";
 import { Mark } from "./mark";
 import { Notice } from "./notice";
@@ -264,6 +264,7 @@ interface RowProps {
   pinned: boolean;
   actions: Actions;
   tile: boolean;
+  indent: boolean;
   dim: boolean;
   note: Note | null;
   tray: Tray | null;
@@ -368,8 +369,8 @@ const tone = (current: boolean, dim: boolean) => {
     return "bg-well text-paper";
   }
   return dim
-    ? "text-fog hover:bg-raise hover:text-body active:bg-well"
-    : "text-paper hover:bg-raise active:bg-well";
+    ? "text-body hover:bg-raise hover:text-paper active:bg-well"
+    : "text-paper font-medium hover:bg-raise active:bg-well";
 };
 
 const Quick = ({ tray }: { tray: Tray | null }) => {
@@ -391,7 +392,7 @@ const Quick = ({ tray }: { tray: Tray | null }) => {
 };
 
 const Row = (props: RowProps) => {
-  const { chat, current, mark, actions, tile, dim, note, tray } = props;
+  const { chat, current, mark, actions, tile, indent, dim, note, tray } = props;
   const [editing, setEditing] = useState(false);
   const [menu, setMenu] = useState(false);
   const [name, setName] = useState(chat.title);
@@ -419,7 +420,7 @@ const Row = (props: RowProps) => {
     return (
       <input
         aria-label={`rename ${chat.title}`}
-        className="border-edge bg-well text-paper h-8 w-full rounded-md border px-2 text-[13px] outline-none"
+        className="border-edge bg-well text-paper h-8 w-full rounded-lg border px-2 font-sans text-[13.5px] outline-none"
         onBlur={commit}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
@@ -443,9 +444,15 @@ const Row = (props: RowProps) => {
     <div className="group relative">
       <button
         aria-current={current ? "true" : undefined}
-        className={`flex h-8 w-full cursor-pointer items-center gap-2 rounded-md pl-2 text-left text-[13px] ${quick ? "pr-16" : "pr-9"} ${tone(current, dim)}`}
+        className={`flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-lg text-left font-sans text-[13.5px] ${indent ? "pl-8" : "pl-2"} ${quick ? "pr-16" : "pr-9"} ${tone(current, dim)}`}
         data-chat=""
         onClick={() => actions.open(chat)}
+        onFocus={() => {
+          prefetch(chat.agent, chat.id, chat.updated).catch(() => null);
+        }}
+        onPointerEnter={() => {
+          prefetch(chat.agent, chat.id, chat.updated).catch(() => null);
+        }}
         onContextMenu={(event) => {
           event.preventDefault();
           setMenu(true);
@@ -503,6 +510,24 @@ const Row = (props: RowProps) => {
   );
 };
 
+const Folder = ({ open }: { open: boolean }) => (
+  <svg
+    aria-hidden="true"
+    className="size-4"
+    fill="none"
+    stroke="currentColor"
+    strokeLinejoin="round"
+    strokeWidth="1.3"
+    viewBox="0 0 16 16"
+  >
+    {open ? (
+      <path d="M2 11.5v-7A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4A1.5 1.5 0 0 1 13.5 6v1M2 11.5l1.6-3.9A1 1 0 0 1 4.5 7H14a.8.8 0 0 1 .7 1.1l-1.5 3.9a1.5 1.5 0 0 1-1.4 1H3.5A1.5 1.5 0 0 1 2 11.5z" />
+    ) : (
+      <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z" />
+    )}
+  </svg>
+);
+
 interface GroupProps {
   project: Project;
   folded: boolean;
@@ -528,9 +553,9 @@ const Group = ({
 }: GroupProps) => {
   const [menu, setMenu] = useState(false);
   return (
-    <section className="flex flex-col gap-px">
+    <section className="flex flex-col gap-0.5">
       <div
-        className="group flex h-7 items-center rounded-md pr-1"
+        className="group flex h-8 items-center rounded-md pr-1"
         onContextMenu={(event) => {
           event.preventDefault();
           setMenu(true);
@@ -538,13 +563,13 @@ const Group = ({
       >
         <button
           aria-expanded={!folded}
-          className="text-fog hover:text-body flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-[12px]"
+          className="text-fog hover:text-body active:text-paper flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2 text-left font-sans text-[13px] font-medium"
           onClick={onFold}
           title={project.place}
           type="button"
         >
-          <span aria-hidden="true" className="w-2.5 text-[9px]">
-            {folded ? "▸" : "▾"}
+          <span className="text-fog">
+            <Folder open={!folded} />
           </span>
           <span className="truncate">{project.name}</span>
         </button>
@@ -608,10 +633,10 @@ const Group = ({
       </div>
       {folded ? null : (
         <>
-          <ul className="flex flex-col gap-px">{children}</ul>
+          <ul className="flex flex-col gap-0.5">{children}</ul>
           {project.more > 0 || opened ? (
             <button
-              className="text-fog hover:text-body cursor-pointer self-start rounded-md py-1 pr-2 pl-[1.85rem] text-[12px]"
+              className="text-fog hover:text-body active:text-paper cursor-pointer self-start rounded-md py-1 pr-2 pl-8 font-sans text-[12.5px]"
               onClick={onMore}
               type="button"
             >
@@ -654,7 +679,7 @@ const Stack = ({ label, count, open, children, onToggle }: ShelfProps) =>
     <section className="flex flex-col gap-px">
       <button
         aria-expanded={open}
-        className="text-fog hover:text-body flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-left text-[12px]"
+        className="text-fog hover:text-body flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-left font-sans text-[12.5px]"
         onClick={onToggle}
         type="button"
       >
@@ -694,7 +719,7 @@ const Places = ({ chats, prefs, actions, onPrefs }: PlacesProps) => {
   return (
     <Popover
       align="start"
-      className="text-body hover:bg-raise hover:text-paper active:bg-well aria-expanded:bg-raise flex h-8 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-left text-[13px]"
+      className="text-fog hover:bg-raise hover:text-paper active:bg-well aria-expanded:bg-raise flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 text-left font-sans text-[13px]"
       label="projects"
       side="bottom"
       trigger={
@@ -766,13 +791,13 @@ const Places = ({ chats, prefs, actions, onPrefs }: PlacesProps) => {
           ) : null}
           <Divider />
           <Option
-            hint="the old layout, one group per folder"
-            label="group by project"
+            hint="every chat in one list, sorted like an inbox"
+            label="flat list"
             onPick={() => {
               close();
-              onPrefs({ ...prefs, grouped: !prefs.grouped });
+              onPrefs({ ...prefs, flat: !prefs.flat });
             }}
-            selected={prefs.grouped}
+            selected={prefs.flat}
           />
         </>
       )}
@@ -833,7 +858,7 @@ const Search = ({
   }, []);
 
   return (
-    <label className="border-rim focus-within:border-edge flex h-8 items-center gap-2 rounded-lg border px-2.5">
+    <label className="bg-raise focus-within:border-edge hover:border-rim flex h-8 items-center gap-2 rounded-lg border border-transparent px-2.5">
       <svg
         aria-hidden="true"
         className="text-fog size-3.5 shrink-0"
@@ -848,7 +873,7 @@ const Search = ({
       </svg>
       <span className="sr-only">search chats</span>
       <input
-        className="text-paper placeholder:text-fog h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none"
+        className="text-paper placeholder:text-fog h-full min-w-0 flex-1 bg-transparent font-sans text-[13.5px] outline-none"
         onChange={(event) => onQuery(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
@@ -967,7 +992,12 @@ export const Sidebar = ({
     return () => window.removeEventListener("keydown", keys);
   }, [chats, current, settleChat]);
 
-  const row = (chat: Chat, shelf: Tray["shelf"] | null, tile: boolean) => {
+  const row = (
+    chat: Chat,
+    shelf: Tray["shelf"] | null,
+    tile: boolean,
+    indent = false
+  ) => {
     const chatKey = keyOf(chat.agent, chat.id);
     const saved = keyed(chat);
     const mark = status.get(chatKey) ?? null;
@@ -997,6 +1027,7 @@ export const Sidebar = ({
             onPrefs({ ...prefs, pinned: toggle(prefs.pinned, saved) })
           }
           pinned={prefs.pinned.includes(saved)}
+          indent={indent}
           tile={tile}
           tray={shelf ? tray(chat, shelf) : null}
         />
@@ -1012,7 +1043,7 @@ export const Sidebar = ({
     <>
       {shelved.pinned.length > 0 ? (
         <section className="flex flex-col gap-px">
-          <p className="text-fog flex h-7 items-center px-2 text-[12px]">
+          <p className="text-fog flex h-7 items-center px-2 font-sans text-[12.5px]">
             pinned
           </p>
           <ul className="flex flex-col gap-px">
@@ -1069,7 +1100,7 @@ export const Sidebar = ({
     <>
       {grouped.pinned.length > 0 ? (
         <section className="flex flex-col gap-px">
-          <p className="text-fog flex h-7 items-center px-2 text-[12px]">
+          <p className="text-fog flex h-7 items-center px-2 font-sans text-[12.5px]">
             pinned
           </p>
           <ul className="flex flex-col gap-px">
@@ -1093,7 +1124,7 @@ export const Sidebar = ({
           opened={prefs.opened.includes(project.folder)}
           project={project}
         >
-          {project.chats.map((chat) => row(chat, null, false))}
+          {project.chats.map((chat) => row(chat, null, false, true))}
         </Group>
       ))}
     </>
@@ -1116,7 +1147,7 @@ export const Sidebar = ({
     if (searching) {
       return results;
     }
-    return prefs.grouped ? folders : inbox;
+    return prefs.flat ? inbox : folders;
   };
 
   return (
@@ -1151,7 +1182,22 @@ export const Sidebar = ({
         className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2 pb-3"
       >
         {listing.state === "loading" ? (
-          <Notice late title="reading your chats" />
+          <output
+            aria-label="loading your chats"
+            className="animate-late flex flex-col gap-1 px-2 pt-1 motion-reduce:animate-none"
+          >
+            {["w-3/4", "w-1/2", "w-2/3", "w-3/5", "w-1/2"].map(
+              (width, index) => (
+                <span
+                  className="flex h-8 items-center gap-2"
+                  key={`${width}${index}`}
+                >
+                  <span className="bg-raise size-4 shrink-0 rounded-sm" />
+                  <span className={`bg-raise h-2.5 rounded-full ${width}`} />
+                </span>
+              )
+            )}
+          </output>
         ) : null}
         {listing.state === "failed" ? (
           <Notice
@@ -1175,7 +1221,7 @@ export const Sidebar = ({
       <Update />
       <footer className="border-rim flex shrink-0 items-center gap-1 border-t p-2">
         <button
-          className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-8 flex-1 cursor-pointer items-center gap-2 rounded-lg px-2 text-left text-[13px]"
+          className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-8 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2 text-left font-sans text-[13.5px]"
           onClick={() => actions.settings()}
           type="button"
         >

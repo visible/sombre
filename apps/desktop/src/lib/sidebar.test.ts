@@ -156,7 +156,7 @@ describe("prefs", () => {
   test("reads the inbox marks and drops anything that isn't a time", () => {
     const saved = parse(
       JSON.stringify({
-        grouped: true,
+        flat: true,
         only: ["/w/app", 4],
         settled: { "claude:a": 100, "claude:b": "soon" },
         shelves: ["settled"],
@@ -167,7 +167,8 @@ describe("prefs", () => {
     expect(saved.snoozed).toEqual({ "codex:c": 200 });
     expect(saved.only).toEqual(["/w/app"]);
     expect(saved.shelves).toEqual(["settled"]);
-    expect(saved.grouped).toBe(true);
+    expect(saved.flat).toBe(true);
+    expect(parse(JSON.stringify({ grouped: false })).flat).toBe(false);
   });
 
   test("toggles entries in a list", () => {
