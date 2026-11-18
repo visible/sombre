@@ -1204,7 +1204,10 @@ fn skills(engine: &Engine) {
         .map(|skill| {
             (
                 skill.name.as_str(),
-                view::fit(&skill.about, view::width().saturating_sub(20)),
+                view::fit(
+                    &sombre_core::scrub::scrub(&skill.about),
+                    view::width().saturating_sub(20),
+                ),
             )
         })
         .collect();

@@ -402,10 +402,11 @@ pub fn typed(shell: bool, text: &str) {
     if ECHOED.load(Ordering::Relaxed) {
         put("");
     }
+    let text = sombre_core::scrub::scrub(text);
     let rows = if shell {
-        crate::compose::lines(text, shell, None, width())
+        crate::compose::lines(&text, shell, None, width())
     } else {
-        card(text, 12, width())
+        card(&text, 12, width())
     };
     for line in rows {
         put(&line);
