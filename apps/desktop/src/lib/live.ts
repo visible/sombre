@@ -22,7 +22,6 @@ export interface Live {
   session: string | null;
   effort: string | null;
   levels: string[];
-  cost: number | null;
   left: number | null;
   folder: string | null;
   goal: Aim | null;
@@ -40,7 +39,6 @@ export type Quiz = Entry & { kind: "questions" };
 
 export const initial = (mode: Mode = "ask"): Live => ({
   busy: false,
-  cost: null,
   effort: null,
   entries: [],
   folder: null,
@@ -134,7 +132,6 @@ const stated = (
 ): Live => ({
   ...live,
   busy: update.busy,
-  cost: update.cost,
   effort: update.effort,
   folder: update.folder,
   goal: update.goal,
@@ -237,7 +234,6 @@ export const apply = (live: Live, update: Update, now: number): Live => {
     }
     case "done": {
       return push(live, {
-        cost: update.cost,
         kind: "done",
         millis: update.millis,
       });

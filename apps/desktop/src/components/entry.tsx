@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { Entry as Item } from "../lib/api";
-import { money } from "../lib/format";
+import { took } from "../lib/format";
 import { Copy } from "./copy";
 import { Markdown } from "./markdown";
 import { Pictures } from "./pictures";
@@ -142,9 +142,9 @@ export const Entry = ({ entry }: Props) => {
       );
     }
     case "done": {
-      const spent = money(entry.cost);
-      return spent ? (
-        <p className="text-fog -mt-1.5 pl-[2ch] text-[12.5px]">{spent}</p>
+      const summary = took(entry.millis);
+      return summary ? (
+        <p className="text-fog -mt-1.5 pl-[2ch] text-[12.5px]">{summary}</p>
       ) : null;
     }
     default: {

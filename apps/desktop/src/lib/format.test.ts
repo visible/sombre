@@ -1,13 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
-import { clip, diff, encode, money, pictures } from "./format";
+import { clip, diff, encode, pictures, short, took } from "./format";
 
-describe("money", () => {
-  test("matches the cli", () => {
-    expect(money(null)).toBe("");
-    expect(money(0)).toBe("");
-    expect(money(0.004)).toBe("<$0.01");
-    expect(money(1.256)).toBe("$1.26");
+describe("took", () => {
+  test("reads like the cli's clock", () => {
+    expect(took(null)).toBe("");
+    expect(took(400)).toBe("<1s");
+    expect(took(6200)).toBe("6s");
+    expect(took(130_000)).toBe("2m 10s");
+    expect(took(3_900_000)).toBe("1h 05m");
+  });
+});
+
+describe("short", () => {
+  test("drops the claude family prefix like the cli", () => {
+    expect(short("claude-opus-5-5")).toBe("opus 5-5");
+    expect(short("opus")).toBe("opus");
+    expect(short("gpt-6.2-sol")).toBe("gpt-6.2-sol");
   });
 });
 

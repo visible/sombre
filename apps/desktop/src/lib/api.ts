@@ -78,7 +78,7 @@ export type Item =
   | { kind: "note"; text: string }
   | { kind: "failed"; text: string }
   | { kind: "changes"; from: string; to: string; files: Changed[] }
-  | { kind: "done"; millis: number | null; cost: number | null };
+  | { kind: "done"; millis: number | null };
 
 export type Entry = Item & { id: number };
 
