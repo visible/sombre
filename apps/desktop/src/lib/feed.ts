@@ -5,6 +5,50 @@ export type Group =
   | { kind: "work"; key: number; steps: (Entry & { kind: "step" })[] }
   | { kind: "single"; key: number; entry: Entry };
 
+const said = (entry: Entry) => {
+  switch (entry.kind) {
+    case "user":
+    case "text":
+    case "note":
+    case "failed": {
+      return entry.text;
+    }
+    case "step": {
+      return `${entry.label} ${entry.detail}`;
+    }
+    default: {
+      return "";
+    }
+  }
+};
+
+export const stitch = (tail: Entry[], whole: Entry[]): Entry[] => {
+  const ids = new Map<number, number>();
+  let left = tail.length - 1;
+  for (let index = whole.length - 1; index >= 0 && left >= 0; index -= 1) {
+    const entry = whole[index];
+    const match = tail[left];
+    if (!entry || !match) {
+      return whole;
+    }
+    if (entry.kind === "changes" && match.kind !== "changes") {
+      continue;
+    }
+    if (entry.kind !== match.kind || said(entry) !== said(match)) {
+      return whole;
+    }
+    ids.set(index, match.id);
+    left -= 1;
+  }
+  if (left >= 0) {
+    return whole;
+  }
+  return whole.map((entry, index) => ({
+    ...entry,
+    id: ids.get(index) ?? -(index + 1),
+  }));
+};
+
 export const group = (entries: Entry[]): Group[] => {
   const groups: Group[] = [];
   for (const entry of entries) {

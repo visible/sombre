@@ -54,6 +54,7 @@ import {
   useBusy,
   useMarks,
   view as watching,
+  warm,
   watch,
 } from "./lib/store";
 import { toast } from "./lib/toasts";
@@ -66,6 +67,7 @@ const Preferences = lazy(async () => {
 });
 
 let resumed = false;
+let warmed = false;
 
 const SAVED = "sombre.prefs";
 
@@ -114,6 +116,10 @@ export const App = () => {
     try {
       const found = await chats();
       setListing({ chats: found, state: "ready" });
+      if (!warmed) {
+        warmed = true;
+        warm(found).catch(() => null);
+      }
       const last = resumed ? null : recall(localStorage.getItem(LAST), found);
       resumed = true;
       setOpen((current) => {

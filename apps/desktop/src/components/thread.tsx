@@ -34,8 +34,7 @@ import {
 import type { Name } from "../lib/commands";
 import { commands } from "../lib/commands";
 import type { Target } from "../lib/feed";
-import { group, recent, rounds } from "../lib/feed";
-import { money } from "../lib/format";
+import { group, recent, rounds, stitch } from "../lib/feed";
 import type { Scope } from "../lib/patch";
 import { pressed, shortcut } from "../lib/platform";
 import { lack } from "../lib/scale";
@@ -44,6 +43,7 @@ import {
   begin,
   halt,
   note,
+  prefetch,
   remember,
   unchanged,
   remembered,
@@ -165,7 +165,6 @@ const report = (fields: {
   mode: Mode;
   folder: string;
   chat: string | null;
-  spent: string;
   left: number | null;
 }) =>
   [
@@ -175,7 +174,6 @@ const report = (fields: {
     `permissions: ${fields.mode}`,
     `folder: ${fields.folder}`,
     `chat: ${fields.chat ?? "not started yet"}`,
-    `spent here: ${fields.spent || "$0.00"}`,
     fields.left === null ? "" : `context left: ${fields.left}%`,
   ]
     .filter(Boolean)
@@ -275,6 +273,31 @@ interface PartsProps {
   onReview: (scope: Scope, focus: string | null) => void;
   onCycle: () => void;
 }
+
+const lines = [
+  ["w-3/5"],
+  ["w-full", "w-11/12", "w-2/3"],
+  ["w-2/5", "w-1/3"],
+  ["w-full", "w-4/5"],
+];
+
+const Skeleton = () => (
+  <output
+    aria-label="opening the chat"
+    className="animate-late mx-auto flex max-w-[780px] flex-col gap-6 px-8 py-8 motion-reduce:animate-none"
+  >
+    {lines.map((widths, index) => (
+      <span
+        className={`flex flex-col gap-2.5 ${index % 2 === 0 ? "border-ember/30 border-l-2 pl-[1.5ch]" : "pl-[2ch]"}`}
+        key={widths.join(",")}
+      >
+        {widths.map((width) => (
+          <span className={`bg-raise h-3 rounded-full ${width}`} key={width} />
+        ))}
+      </span>
+    ))}
+  </output>
+);
 
 const Parts = ({
   agent,
@@ -385,7 +408,7 @@ const Feed = ({
   <div className="relative min-h-0 flex-1">
     {top}
     <div
-      className="h-full overflow-y-auto select-text"
+      className="h-full overflow-y-auto [mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)] select-text"
       onScroll={(event) => {
         const element = event.currentTarget;
         onPinned(
@@ -394,9 +417,7 @@ const Feed = ({
       }}
       ref={scroller}
     >
-      {story.state === "loading" ? (
-        <Notice late title="reading the chat" />
-      ) : null}
+      {story.state === "loading" ? <Skeleton /> : null}
       {story.state === "failed" ? (
         <Notice onRetry={onRetry} title="couldn't read this chat">
           <p>{story.message}</p>
@@ -539,13 +560,13 @@ const Open = ({
       return;
     }
     try {
-      const first = await read(agent, id, false);
-      remember(key, first.entries, updated, first.whole);
+      const first = await prefetch(agent, id, updated);
       setStory({ entries: first.entries, state: "ready" });
       if (!first.whole) {
         const full = await read(agent, id, true);
-        remember(key, full.entries, updated, true);
-        setStory({ entries: full.entries, state: "ready" });
+        const entries = stitch(first.entries, full.entries);
+        remember(key, entries, updated, true);
+        setStory({ entries, state: "ready" });
       }
     } catch (error) {
       setStory({ message: failure(error), state: "failed" });
@@ -697,7 +718,6 @@ const Open = ({
       left: live.left,
       mode,
       model,
-      spent: money(live.cost),
     });
 
   const command = (name: Name, rest: string) =>

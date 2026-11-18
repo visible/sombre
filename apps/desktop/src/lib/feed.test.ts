@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Chat, Entry } from "./api";
-import { fresh, group, matches, recent, rounds, summary, target } from "./feed";
+import {
+  fresh,
+  group,
+  matches,
+  recent,
+  rounds,
+  stitch,
+  summary,
+  target,
+} from "./feed";
 
 const step = (id: number, label: string): Entry => ({
   detail: "",
@@ -88,7 +97,7 @@ describe("turn changes", () => {
   const entries: Entry[] = [
     { id: 1, kind: "user", text: "fix it" },
     { files: [], from: "a", id: 2, kind: "changes", to: "b" },
-    { cost: null, id: 3, kind: "done", millis: null },
+    { id: 3, kind: "done", millis: null },
     { files: [], from: "b", id: 4, kind: "changes", to: "c" },
   ];
 
@@ -111,5 +120,45 @@ describe("summary", () => {
       ])
     ).toBe("ran 2 commands, read 1 file, edited 1 file, 1 other step");
     expect(summary([{ label: "Find" }])).toBe("searched 1 time");
+  });
+});
+
+const user = (id: number, text: string): Entry => ({
+  id,
+  kind: "user",
+  text,
+});
+const reply = (id: number, text: string): Entry => ({
+  id,
+  kind: "text",
+  text,
+});
+const changes = (id: number): Entry => ({
+  files: [],
+  from: "a",
+  id,
+  kind: "changes",
+  to: "b",
+});
+
+describe("stitch", () => {
+  test("the recent end keeps its ids so nothing on screen remounts", () => {
+    const tail = [user(0, "two"), reply(1, "b")];
+    const whole = [
+      user(0, "one"),
+      reply(1, "a"),
+      user(2, "two"),
+      changes(3),
+      reply(4, "b"),
+    ];
+    expect(stitch(tail, whole).map((entry) => entry.id)).toEqual([
+      -1, -2, 0, -4, 1,
+    ]);
+  });
+
+  test("a chat that changed between reads falls back to the full read", () => {
+    const tail = [user(0, "two"), reply(1, "b")];
+    const whole = [user(0, "one"), reply(1, "something else")];
+    expect(stitch(tail, whole)).toBe(whole);
   });
 });

@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 
 import type {
   Agent,
+  Chat,
   Choice,
   Entry,
   Mode,
@@ -13,6 +14,7 @@ import type {
 import {
   answer,
   carry,
+  chat as history,
   compact,
   failure,
   goal,
@@ -53,7 +55,8 @@ const stories = new Map<
   { entries: Entry[]; updated: number; whole: boolean }
 >();
 const prompts = new Map<string, number>();
-const KEPT = 6;
+const KEPT = 12;
+const WARMED = 5;
 const unread = new Set<string>();
 let viewing: string | null = null;
 let shown = "";
@@ -541,6 +544,41 @@ export const remember = (
     stories.delete(old);
   }
 };
+
+const reading = new Map<
+  string,
+  Promise<{ entries: Entry[]; whole: boolean }>
+>();
+
+export const prefetch = (agent: Agent, id: string, updated: number) => {
+  const key = keyOf(agent, id);
+  const going = reading.get(key);
+  if (going) {
+    return going;
+  }
+  const found = stories.get(key);
+  if (found && found.updated === updated) {
+    return Promise.resolve({ entries: found.entries, whole: found.whole });
+  }
+  const promise = history(agent, id, false)
+    .then((first) => {
+      remember(key, first.entries, updated, first.whole);
+      return first;
+    })
+    .finally(() => reading.delete(key));
+  reading.set(key, promise);
+  return promise;
+};
+
+const chain = async (chats: Chat[]): Promise<void> => {
+  const [next, ...rest] = chats;
+  if (next) {
+    await prefetch(next.agent, next.id, next.updated);
+    await chain(rest);
+  }
+};
+
+export const warm = (chats: Chat[]) => chain(chats.slice(0, WARMED));
 
 export const forget = (key: string) => {
   opened.delete(key);
