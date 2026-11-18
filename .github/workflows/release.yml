@@ -58,7 +58,23 @@ jobs:
           if-no-files-found: error
   desktop:
     needs: check
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            rust: aarch64-apple-darwin,x86_64-apple-darwin
+            target: universal-apple-darwin
+            bundles: app,dmg
+          - os: windows-latest
+            rust: x86_64-pc-windows-msvc
+            target: ""
+            bundles: nsis
+          - os: ubuntu-22.04
+            rust: x86_64-unknown-linux-gnu
+            target: ""
+            bundles: deb,rpm,appimage
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -66,12 +82,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca
         with:
           toolchain: stable
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.rust }}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libfuse2 file
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun install --frozen-lockfile
       - shell: bash
         env:
           SOMBRE_RELEASE: "1"
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -81,7 +101,13 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+          args=(--bundles "$BUNDLES")
+          if [ -n "$TARGET" ]; then
+            args+=(--target "$TARGET")
+          fi
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            args+=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
             echo "::error::set the TAURI_SIGNING_PRIVATE_KEY secret, or installed apps can't update"
             exit 1
           fi
@@ -90,19 +116,37 @@ jobs:
               unset "$name"
             fi
           done
-          bun run --filter desktop tauri build --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":true}}' 2>&1 | tee build.log
+          bun run --filter desktop tauri build "${args[@]}" 2>&1 | tee build.log
           if grep -q "does not match the public key" build.log; then
             echo "::error::the TAURI_SIGNING_PRIVATE_KEY secret isn't the key sombre's public key belongs to"
             exit 1
           fi
-          bundle=target/universal-apple-darwin/release/bundle
+          bundle="target/${TARGET:+$TARGET/}release/bundle"
           mkdir out
-          cp "$bundle/macos/sombre.app.tar.gz" out/sombre.app.tar.gz
-          cp "$bundle/macos/sombre.app.tar.gz.sig" out/sombre.app.tar.gz.sig
-          cp "$bundle"/dmg/*.dmg out/sombre.dmg
+          take() {
+            cp "$1" "out/$2"
+            if [ -f "$1.sig" ]; then
+              cp "$1.sig" "out/$2.sig"
+            fi
+          }
+          case "$RUNNER_OS" in
+            macOS)
+              take "$bundle/macos/sombre.app.tar.gz" sombre.app.tar.gz
+              take "$(ls "$bundle"/dmg/*.dmg)" sombre.dmg
+              ;;
+            Windows)
+              take "$(ls "$bundle"/nsis/*-setup.exe)" sombre-setup.exe
+              ;;
+            Linux)
+              take "$(ls "$bundle"/deb/*.deb)" sombre.deb
+              take "$(ls "$bundle"/rpm/*.rpm)" sombre.rpm
+              take "$(ls "$bundle"/appimage/*.AppImage)" sombre.AppImage
+              ;;
+          esac
+          ls -la out
       - uses: actions/upload-artifact@v7
         with:
-          name: sombre-desktop
+          name: sombre-desktop-${{ runner.os }}
           path: out/*
           if-no-files-found: error
   publish:
@@ -136,10 +180,31 @@ jobs:
       - env:
           TAG: ${{ github.ref_name }}
         run: |
+          for file in sombre-*.tar.gz sombre-*.zip sombre.app.tar.gz sombre-setup.exe sombre.deb sombre.rpm sombre.AppImage; do
+            if [ ! -s "$file.sig" ]; then
+              echo "::error::$file has no update signature"
+              exit 1
+            fi
+          done
           sh scripts/notes.sh "$TAG" > notes.md
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/sombre.app.tar.gz"
-          jq -n --arg version "${TAG#v}" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg signature "$(cat sombre.app.tar.gz.sig)" --arg url "$url" \
-            '{version: $version, pub_date: $date, platforms: {"darwin-aarch64": {signature: $signature, url: $url}, "darwin-x86_64": {signature: $signature, url: $url}}}' > latest.json
+          jq -n \
+            --arg version "${TAG#v}" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg base "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG" \
+            --arg mac "$(cat sombre.app.tar.gz.sig)" \
+            --arg windows "$(cat sombre-setup.exe.sig)" \
+            --arg deb "$(cat sombre.deb.sig)" \
+            --arg rpm "$(cat sombre.rpm.sig)" \
+            --arg appimage "$(cat sombre.AppImage.sig)" \
+            '{version: $version, pub_date: $date, platforms: {
+              "darwin-aarch64": {signature: $mac, url: "\($base)/sombre.app.tar.gz"},
+              "darwin-x86_64": {signature: $mac, url: "\($base)/sombre.app.tar.gz"},
+              "windows-x86_64": {signature: $windows, url: "\($base)/sombre-setup.exe"},
+              "linux-x86_64": {signature: $appimage, url: "\($base)/sombre.AppImage"},
+              "linux-x86_64-appimage": {signature: $appimage, url: "\($base)/sombre.AppImage"},
+              "linux-x86_64-deb": {signature: $deb, url: "\($base)/sombre.deb"},
+              "linux-x86_64-rpm": {signature: $rpm, url: "\($base)/sombre.rpm"}
+            }}' > latest.json
           sha256sum sombre-* sombre.* latest.json > SHA256SUMS
       - uses: actions/attest-build-provenance@v4
         with:

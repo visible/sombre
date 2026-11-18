@@ -17,13 +17,19 @@ curl -fsSL https://sombre.si/install | sh
 irm https://sombre.si/install.ps1 | iex
 ```
 
-the desktop app for mac:
+the desktop app, on mac and linux:
 
 ```sh
 curl -fsSL https://sombre.si/desktop | sh
 ```
 
-or open `sombre.dmg` below. the cli and the app update themselves from here on.
+and on windows:
+
+```powershell
+irm https://sombre.si/desktop.ps1 | iex
+```
+
+or download `sombre.dmg`, `sombre-setup.exe`, `sombre.deb`, `sombre.rpm`, or `sombre.AppImage` below. the cli and the app update themselves from here on.
 
 EOF
 
