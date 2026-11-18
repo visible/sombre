@@ -10,12 +10,11 @@ use sombre_harness::config::Config;
 
 use crate::view;
 
-pub const PARTS: [&str; 8] = [
+pub const PARTS: [&str; 7] = [
     "agent",
     "model",
     "permissions",
     "context",
-    "cost",
     "branch",
     "pr",
     "folder",
@@ -38,7 +37,6 @@ pub struct Values {
     pub model: Option<String>,
     pub permissions: Option<String>,
     pub context: Option<String>,
-    pub cost: Option<String>,
     pub branch: Option<String>,
     pub pr: Option<String>,
     pub folder: Option<String>,
@@ -57,7 +55,6 @@ pub fn assemble(order: &[String], values: &Values) -> Vec<String> {
             "model" => values.model.clone(),
             "permissions" => values.permissions.clone(),
             "context" => values.context.clone(),
-            "cost" => values.cost.clone(),
             "branch" => values.branch.clone(),
             "pr" => values.pr.clone(),
             "folder" => values.folder.clone(),
@@ -111,7 +108,6 @@ pub fn parts(engine: &Engine) -> Vec<String> {
         agent: Some(engine.name().to_string()),
         branch,
         context: engine.left.map(|left| format!("{left}% left")),
-        cost: engine.cost.map(view::money),
         folder: Some(view::home(&engine.cwd)),
         model: engine.label.as_deref().map(short),
         permissions: Some(engine.mode.name().to_string()),
@@ -147,7 +143,6 @@ mod tests {
             agent: Some("claude code".to_string()),
             branch: Some("main".to_string()),
             context: Some("82% left".to_string()),
-            cost: Some("$0.14".to_string()),
             folder: Some("~/code/app".to_string()),
             model: Some("opus".to_string()),
             permissions: Some("ask".to_string()),
@@ -161,7 +156,7 @@ mod tests {
             .iter()
             .map(|part| (*part).to_string())
             .collect();
-        assert_eq!(assemble(&order, &values()), ["$0.14", "main", "opus"]);
+        assert_eq!(assemble(&order, &values()), ["main", "opus"]);
         assert_eq!(
             assemble(&[], &values()),
             [
@@ -169,7 +164,6 @@ mod tests {
                 "opus",
                 "ask",
                 "82% left",
-                "$0.14",
                 "main",
                 "~/code/app"
             ]

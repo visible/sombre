@@ -578,10 +578,21 @@ const tone = (row) => {
 };
 
 export const summary = (message) => {
-  if (!(message.cost > 0)) {
+  if (typeof message.millis !== "number") {
     return "";
   }
-  return message.cost < 0.01 ? "<$0.01" : `$${message.cost.toFixed(2)}`;
+  const seconds = Math.floor(message.millis / 1000);
+  if (seconds < 1) {
+    return "<1s";
+  }
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  if (seconds < 3600) {
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  }
+  const minutes = String(Math.floor(seconds / 60) % 60).padStart(2, "0");
+  return `${Math.floor(seconds / 3600)}h ${minutes}m`;
 };
 
 const ring = (left) => {

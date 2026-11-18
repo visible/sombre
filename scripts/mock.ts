@@ -118,7 +118,7 @@ const answer = (message: Message) => {
     { detail: "cargo test", kind: "step", label: "Run" },
     ...words.map((word) => ({ kind: "delta", text: `${word} ` })),
     { kind: "text", text: words.join(" ") },
-    { cost: 0.03, kind: "done", left: 72 },
+    { cost: 0.03, kind: "done", left: 72, millis: 6400 },
   ];
   for (const [index, item] of timeline.entries()) {
     setTimeout(() => push(item), 200 + index * 120);
@@ -194,10 +194,10 @@ const server = Bun.serve({
             ? `You picked ${message.answers.join(" and ")}.`
             : "Skipped. Tell me what to do instead.",
         });
-        push({ cost: 0.01, kind: "done", left: 72 });
+        push({ cost: 0.01, kind: "done", left: 72, millis: 1800 });
       } else if (message.kind === "answer") {
         push({ id: message.id, kind: "decided", yes: message.yes });
-        push({ cost: 0.01, kind: "done", left: 72 });
+        push({ cost: 0.01, kind: "done", left: 72, millis: 1800 });
       }
       return new Response("ok");
     }

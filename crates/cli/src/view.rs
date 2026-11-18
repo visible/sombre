@@ -693,14 +693,6 @@ pub fn home(path: &Path) -> String {
     }
 }
 
-pub fn money(cost: f64) -> String {
-    if cost > 0.0 && cost < 0.01 {
-        "<$0.01".to_string()
-    } else {
-        format!("${cost:.2}")
-    }
-}
-
 pub fn table(rows: &[(&str, String)]) {
     keep(Entry::Table(
         rows.iter()
@@ -1381,15 +1373,8 @@ pub fn done(
         left,
     ));
     gap();
-    let mut parts: Vec<String> = millis.map(took).into_iter().collect();
-    if let Some(cost) = cost.filter(|cost| *cost > 0.0) {
-        parts.push(money(cost));
-    }
-    if !parts.is_empty() {
-        put(&format!(
-            "  {}",
-            dim(&fit(&parts.join(" · "), width().saturating_sub(3)))
-        ));
+    if let Some(millis) = millis {
+        put(&format!("  {}", dim(&took(millis))));
         put("");
     }
 }
@@ -1433,7 +1418,7 @@ pub fn help() {
     let rows = [
         ("/resume", "pick a chat with this agent from this folder"),
         ("/resume all", "pick a chat with this agent from any folder"),
-        ("/status", "agent, model, permissions, context, and cost"),
+        ("/status", "agent, model, permissions, and context"),
         ("/compact", "summarize the chat to free up context"),
         ("/skills", "skills sombre's agent can use"),
         (

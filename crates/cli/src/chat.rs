@@ -1392,9 +1392,6 @@ fn status(engine: &Engine, roots: Option<&Roots>) {
     if let Some(left) = engine.left {
         rows.push(("context", format!("{left}% left")));
     }
-    if let Some(cost) = engine.cost {
-        rows.push(("cost", format!("{} this session", view::money(cost))));
-    }
     if let Some(roots) = roots {
         rows.push((
             "config",

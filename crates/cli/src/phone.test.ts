@@ -170,11 +170,11 @@ describe("steps on the phone", () => {
 });
 
 describe("summary", () => {
-  test("shows costs the way the computer does", () => {
-    expect(summary({ cost: 0.004 })).toBe("<$0.01");
-    expect(summary({ cost: 0.0123 })).toBe("$0.01");
-    expect(summary({ cost: 1.5 })).toBe("$1.50");
-    expect(summary({ cost: 0 })).toBe("");
-    expect(summary({})).toBe("");
+  test("shows how long the turn took the way the computer does", () => {
+    expect(summary({ cost: 1.5, millis: 400 })).toBe("<1s");
+    expect(summary({ millis: 6200 })).toBe("6s");
+    expect(summary({ millis: 130_000 })).toBe("2m 10s");
+    expect(summary({ millis: 3_900_000 })).toBe("1h 05m");
+    expect(summary({ cost: 0.5 })).toBe("");
   });
 });
