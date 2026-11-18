@@ -39,6 +39,7 @@ const CONNECTIONS: usize = 64;
 const BUDGET: usize = 32 * 1024 * 1024;
 const TICKET: Duration = Duration::from_secs(10 * 60);
 const GRACE: Duration = Duration::from_secs(60);
+const GATHER: Duration = Duration::from_millis(50);
 const STALE: u64 = 7 * 24 * 60 * 60 * 1000;
 
 type Rooms = HashMap<String, Room>;
@@ -850,6 +851,14 @@ impl Session {
                     }
                     outbox = match self.queued.wait_timeout(outbox, Duration::from_millis(500)) {
                         Ok((outbox, _)) => outbox,
+                        Err(_) => return,
+                    };
+                }
+                if outbox.back().is_some_and(|(_, message)| streamed(message)) {
+                    drop(outbox);
+                    thread::sleep(GATHER);
+                    outbox = match self.outbox.lock() {
+                        Ok(outbox) => outbox,
                         Err(_) => return,
                     };
                 }
@@ -1904,6 +1913,32 @@ mod tests {
                 .as_str()
                 .is_some_and(|src| src.starts_with("data:image/png;base64,"))
         );
+    }
+
+    #[test]
+    fn a_streamed_reply_lands_as_a_few_items_instead_of_one_per_delta() {
+        let local = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        let link = here_at(local, local, Reach::Wifi).unwrap_or_else(|error| panic!("{error}"));
+        let session = Arc::new(session(link));
+        let sender = Arc::clone(&session);
+        let worker = thread::spawn(move || sender.deliver());
+        for word in 0..30 {
+            session.post(&json!({"kind": "delta", "text": format!("word{word} ")}));
+            thread::sleep(Duration::from_millis(5));
+        }
+        thread::sleep(Duration::from_millis(300));
+        session.stop.store(true, Ordering::SeqCst);
+        session.queued.notify_all();
+        let _ = worker.join();
+        let Link::Here { hub, room, .. } = &session.link else {
+            panic!("not a local link");
+        };
+        let stored = hub
+            .rooms
+            .lock()
+            .map(|rooms| rooms.get(room).map_or(0, |found| found.out.len()))
+            .unwrap_or_default();
+        assert!((1..=8).contains(&stored), "{stored} items for 30 deltas");
     }
 
     #[test]
