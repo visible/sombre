@@ -131,6 +131,9 @@ jobs:
           }
           case "$RUNNER_OS" in
             macOS)
+              if [ ! -f "$bundle/macos/sombre.app.tar.gz" ]; then
+                tar -czf "$bundle/macos/sombre.app.tar.gz" -C "$bundle/macos" sombre.app
+              fi
               take "$bundle/macos/sombre.app.tar.gz" sombre.app.tar.gz
               take "$(ls "$bundle"/dmg/*.dmg)" sombre.dmg
               ;;
