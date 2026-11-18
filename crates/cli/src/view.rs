@@ -1431,8 +1431,8 @@ pub fn clear() {
 pub fn help() {
     keep(Entry::Help);
     let rows = [
-        ("/resume", "pick a chat from this folder, from any agent"),
-        ("/resume all", "pick a chat from any folder"),
+        ("/resume", "pick a chat with this agent from this folder"),
+        ("/resume all", "pick a chat with this agent from any folder"),
         ("/status", "agent, model, permissions, context, and cost"),
         ("/compact", "summarize the chat to free up context"),
         ("/skills", "skills sombre's agent can use"),

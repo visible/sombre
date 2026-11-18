@@ -60,6 +60,14 @@ pub struct Engine {
     rounds: usize,
 }
 
+pub fn display(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "claude code",
+        Agent::Codex => "codex",
+        Agent::Sombre => "sombre",
+    }
+}
+
 impl Engine {
     pub fn new(agent: Agent, cwd: PathBuf, session: Option<String>) -> Self {
         let config = Roots::detect().and_then(|roots| Config::load(&roots.sombre).ok());
@@ -101,11 +109,7 @@ impl Engine {
     }
 
     pub fn name(&self) -> &'static str {
-        match self.agent {
-            Agent::Claude => "claude code",
-            Agent::Codex => "codex",
-            Agent::Sombre => "sombre",
-        }
+        display(self.agent)
     }
 
     pub fn send(&mut self, text: &str) -> io::Result<()> {

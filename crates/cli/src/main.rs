@@ -159,7 +159,7 @@ fn run(cli: Cli) -> ExitCode {
         ),
         Action::Resume { id: Some(id), .. } => resume(&sessions, &id),
         Action::Resume { id: None, all } => {
-            chat::pick(&sessions, &cwd, all).map_or(ExitCode::SUCCESS, enter)
+            chat::pick(&sessions, &cwd, all, None).map_or(ExitCode::SUCCESS, enter)
         }
         Action::Relay { .. } | Action::Update => ExitCode::SUCCESS,
     }

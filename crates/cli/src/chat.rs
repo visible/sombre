@@ -449,7 +449,7 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
                     continue;
                 };
                 let sessions = scan(roots);
-                if let Some(session) = pick(&sessions, &engine.cwd, all)
+                if let Some(session) = pick(&sessions, &engine.cwd, all, Some(engine.agent))
                     && let Some(next) = open(session)
                 {
                     let (history, whole) = sombre_core::recent(session, view::RECENT);
@@ -587,54 +587,94 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
     ExitCode::SUCCESS
 }
 
-pub fn pick<'a>(sessions: &'a [Session], cwd: &Path, all: bool) -> Option<&'a Session> {
-    let local: Vec<&Session> = if all {
+pub fn pick<'a>(
+    sessions: &'a [Session],
+    cwd: &Path,
+    all: bool,
+    agent: Option<Agent>,
+) -> Option<&'a Session> {
+    let places: Vec<&Session> = if all {
         sessions.iter().collect()
     } else {
         here(sessions, cwd)
     };
+    let local: Vec<&Session> = places
+        .iter()
+        .copied()
+        .filter(|session| agent.is_none_or(|agent| session.agent == agent))
+        .collect();
     if local.is_empty() {
-        view::note(if all {
-            "no chats yet from claude code, codex, or sombre"
-        } else {
-            "no chats in this folder yet. /resume all shows every folder"
-        });
+        view::note(&empty(&places, all, agent));
         return None;
     }
     let time = now();
+    let whose = agent.map_or_else(String::new, |agent| {
+        format!("{} ", sombre_engine::display(agent))
+    });
     let title = if all {
-        "resume any chat"
+        format!("resume any {whose}chat")
     } else {
-        "resume a chat from this folder"
+        format!("resume a {whose}chat from this folder")
     };
     let choice = local
         .iter()
         .enumerate()
         .fold(crate::menu::select(title), |menu, (index, session)| {
-            let place = if all {
-                format!("  {}", view::folder(&session.cwd))
-            } else {
-                String::new()
-            };
-            let last = sombre_core::latest(session)
-                .filter(|latest| *latest != session.title)
-                .map(|latest| format!("  last: {latest}"))
-                .unwrap_or_default();
-            menu.item(
-                index,
-                &session.title,
-                format!(
-                    "{}{place}  {}{last}",
-                    session.agent.name(),
-                    ago(session.updated, time)
-                ),
-            )
+            let mut parts: Vec<String> = Vec::new();
+            if agent.is_none() {
+                parts.push(sombre_engine::display(session.agent).to_string());
+            }
+            if all {
+                parts.push(view::folder(&session.cwd));
+            }
+            parts.push(ago(session.updated, time));
+            if let Some(latest) =
+                sombre_core::latest(session).filter(|latest| *latest != session.title)
+            {
+                parts.push(format!("last: {latest}"));
+            }
+            menu.item(index, &session.title, parts.join(" · "))
         })
         .filter_mode()
         .max_rows(10)
         .interact()
         .ok()?;
     local.get(choice).copied()
+}
+
+fn empty(places: &[&Session], all: bool, agent: Option<Agent>) -> String {
+    let Some(agent) = agent else {
+        return if all {
+            "no chats yet from claude code, codex, or sombre".to_string()
+        } else {
+            "no chats in this folder yet. /resume all shows every folder".to_string()
+        };
+    };
+    let place = if all { "" } else { " in this folder" };
+    let other = places
+        .iter()
+        .find(|session| session.agent != agent)
+        .map(|session| session.agent);
+    match other {
+        Some(other) => {
+            let count = places
+                .iter()
+                .filter(|session| session.agent == other)
+                .count();
+            let noun = if count == 1 { "chat" } else { "chats" };
+            format!(
+                "no {} chats{place} yet. {} has {count} {noun} here. /agent {} switches to it",
+                sombre_engine::display(agent),
+                sombre_engine::display(other),
+                other.name()
+            )
+        }
+        None if all => format!("no {} chats yet", sombre_engine::display(agent)),
+        None => format!(
+            "no {} chats in this folder yet. /resume all shows every folder",
+            sombre_engine::display(agent)
+        ),
+    }
 }
 
 fn closed(errors: &[String]) -> Option<&str> {
@@ -2268,6 +2308,36 @@ fn follow(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_resume_points_to_the_agent_that_has_chats_here() {
+        let chat = |agent: Agent| Session {
+            agent,
+            id: "1".to_string(),
+            title: "t".to_string(),
+            cwd: PathBuf::from("/w"),
+            updated: 0,
+            path: PathBuf::new(),
+        };
+        let claude = [
+            chat(Agent::Claude),
+            chat(Agent::Claude),
+            chat(Agent::Claude),
+        ];
+        let here: Vec<&Session> = claude.iter().collect();
+        assert_eq!(
+            empty(&here, false, Some(Agent::Codex)),
+            "no codex chats in this folder yet. claude code has 3 chats here. /agent claude switches to it"
+        );
+        assert_eq!(
+            empty(&[], false, Some(Agent::Codex)),
+            "no codex chats in this folder yet. /resume all shows every folder"
+        );
+        assert_eq!(
+            empty(&[], false, None),
+            "no chats in this folder yet. /resume all shows every folder"
+        );
+    }
 
     #[test]
     fn a_closed_agent_names_its_error_line_not_its_last() {
