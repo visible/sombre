@@ -278,20 +278,17 @@ fn pretty(shown: &[&Session], total: usize, time: u64, cwd: &Path) {
         .iter()
         .map(|session| ago(session.updated, time))
         .collect();
-    let place = folders
-        .iter()
-        .map(|folder| view::cells(folder))
-        .max()
-        .unwrap_or(0)
-        .min(18);
-    let age = ages
-        .iter()
-        .map(|age| age.chars().count())
-        .max()
-        .unwrap_or(0);
-    let room = view::width()
-        .saturating_sub(age + place + 6 + 8 + 14)
-        .max(12);
+    let widest = |cells: &mut dyn Iterator<Item = usize>| cells.max().unwrap_or(0);
+    let place = widest(&mut folders.iter().map(|folder| view::cells(folder))).min(18);
+    let age = widest(&mut ages.iter().map(|age| view::cells(age)));
+    let agent = widest(
+        &mut shown
+            .iter()
+            .map(|session| view::cells(session.agent.name())),
+    );
+    let width = view::width();
+    let room = width.saturating_sub(age + agent + place + 21);
+    let stacked = room < 16;
     let here = cwd.to_path_buf();
     let count = if shown.len() < total {
         format!("{} of {total} chats, newest first", shown.len())
@@ -302,7 +299,13 @@ fn pretty(shown: &[&Session], total: usize, time: u64, cwd: &Path) {
         )
     };
     println!();
-    println!("  {}  {}", view::bold("sombre"), view::dim(&count));
+    println!(
+        "  {}",
+        view::clip(
+            &format!("{}  {}", view::bold("sombre"), view::dim(&count)),
+            width.saturating_sub(3)
+        )
+    );
     println!();
     for ((session, folder), when) in shown.iter().zip(&folders).zip(&ages) {
         let dot = if session.cwd == here {
@@ -310,14 +313,26 @@ fn pretty(shown: &[&Session], total: usize, time: u64, cwd: &Path) {
         } else {
             " ".to_string()
         };
-        println!(
-            "  {dot} {}  {}  {}  {}  {}",
-            view::dim(&format!("{when:>age$}")),
-            view::dim(&format!("{:<6}", session.agent.name())),
+        let lead = format!(
+            "  {dot} {}  {}  {}",
+            view::dim(&format!("{}{when}", " ".repeat(age - view::cells(when)))),
+            view::dim(&view::pad(session.agent.name(), agent)),
             view::pad(folder, place),
-            view::pad(&session.title, room),
-            view::dim(short(&session.id)),
         );
+        if stacked {
+            println!(
+                "{}  {}",
+                view::clip(&lead, width.saturating_sub(12)),
+                view::dim(short(&session.id))
+            );
+            println!("    {}", view::fit(&session.title, width.saturating_sub(5)));
+        } else {
+            println!(
+                "{lead}  {}  {}",
+                view::pad(&session.title, room),
+                view::dim(short(&session.id)),
+            );
+        }
     }
     println!();
     let hint = if shown.len() < total {
@@ -325,7 +340,9 @@ fn pretty(shown: &[&Session], total: usize, time: u64, cwd: &Path) {
     } else {
         "sombre resume <id> continues a chat"
     };
-    println!("  {}", view::dim(hint));
+    for line in view::wrap(hint, width.saturating_sub(3)) {
+        println!("  {}", view::dim(&line));
+    }
     println!();
 }
 
