@@ -1238,6 +1238,32 @@ const start = () => {
     add(card);
     attention();
   };
+  const standby = () => {
+    settle();
+    const card = element("section", "ask");
+    card.setAttribute("aria-live", "assertive");
+    card.append(
+      element("h2", "", "sombre stopped on your computer"),
+      element("p", "note", "the sombre app there can pick this chat up")
+    );
+    const row = element("div", "choices");
+    const go = element("button", "key yes", "continue in the app");
+    go.type = "button";
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      go.textContent = "opening it on your computer";
+      outbox.push({
+        id: ticket(),
+        value: { at: Date.now(), kind: "continue" },
+      });
+      store();
+      await deliver();
+    });
+    row.append(go);
+    card.append(row);
+    add(card);
+    attention();
+  };
   const ask = (message) => {
     settle();
     const command = message.tool === "Bash";
@@ -1361,6 +1387,10 @@ const start = () => {
       return;
     }
     switch (message.kind) {
+      case "standby": {
+        standby();
+        break;
+      }
       case "hello": {
         hello(message);
         break;

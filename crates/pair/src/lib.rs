@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use crate::tailscale::Node;
 use crate::wire::Wire;
 
+mod standby;
 mod tailscale;
 mod wire;
 
@@ -61,6 +62,7 @@ pub enum Inbound {
         answers: Option<Vec<String>>,
     },
     Outdated,
+    Continue,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -227,6 +229,7 @@ pub fn inbound(plain: &[u8]) -> Option<Inbound> {
                 text: text.to_string(),
             })
         }
+        "continue" => Some(Inbound::Continue),
         "answer" | "reply" if message["id"].as_str().is_none_or(str::is_empty) => {
             Some(Inbound::Outdated)
         }
@@ -964,6 +967,7 @@ fn pull(session: &Session) {
                         replies.push_back((id, answers));
                     }
                 }
+                Some(Inbound::Continue) => standby::asked(),
                 Some(Inbound::Outdated) => post(&json!({
                     "kind": "note",
                     "text": "this page is out of date, so that answer was ignored. reload it and answer again",
@@ -1081,6 +1085,9 @@ fn snapshot(session: &Session) -> Value {
 }
 
 fn keep(session: &Session) {
+    if standby::standing() {
+        return;
+    }
     let Some(path) = place() else {
         return;
     };
@@ -1095,6 +1102,12 @@ fn keep(session: &Session) {
         && let Ok(mut saved) = session.saved.lock()
     {
         *saved = text;
+    }
+}
+
+fn save() {
+    if let Some(session) = live() {
+        keep(&session);
     }
 }
 
@@ -1285,6 +1298,19 @@ pub fn invite(reach: Reach, relay: Option<&str>) -> Result<(String, Reach), Stri
     ))
 }
 
+pub use standby::{lock, stand, take};
+
+fn drop_live() {
+    let Some(session) = LIVE.lock().ok().and_then(|mut live| live.take()) else {
+        return;
+    };
+    session.stop.store(true, Ordering::SeqCst);
+    if let Ok(mut followed) = FOLLOWED.lock() {
+        *followed = None;
+    }
+    halt(&session.link);
+}
+
 pub fn close() -> bool {
     let Some(session) = LIVE.lock().ok().and_then(|mut live| live.take()) else {
         return false;
@@ -1397,7 +1423,11 @@ fn restore() -> Result<bool, String> {
     let Some(text) = place().and_then(|path| std::fs::read_to_string(path).ok()) else {
         return Ok(false);
     };
-    let saved: Value = serde_json::from_str(&text).unwrap_or_default();
+    restore_from(&text)
+}
+
+fn restore_from(text: &str) -> Result<bool, String> {
+    let saved: Value = serde_json::from_str(text).unwrap_or_default();
     let (Some(room), Some(secret)) = (saved["room"].as_str(), saved["secret"].as_str()) else {
         return Ok(false);
     };
@@ -1939,6 +1969,16 @@ mod tests {
             .map(|rooms| rooms.get(room).map_or(0, |found| found.out.len()))
             .unwrap_or_default();
         assert!((1..=8).contains(&stored), "{stored} items for 30 deltas");
+    }
+
+    #[test]
+    fn a_phone_can_ask_the_app_to_continue_a_chat() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis());
+        let asked = format!(r#"{{"kind":"continue","at":{now}}}"#);
+        assert_eq!(inbound(asked.as_bytes()), Some(Inbound::Continue));
+        assert_eq!(inbound(br#"{"kind":"continue","at":1}"#), None);
     }
 
     #[test]

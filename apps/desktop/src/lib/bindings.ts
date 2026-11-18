@@ -16,6 +16,7 @@ export const commands = {
 	phones: (options?: InvokeOptions) => __TAURI_INVOKE<Phone[]>("phones", undefined, options),
 	forget: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<boolean>("forget", { id }, options),
 	unpair: (options?: InvokeOptions) => __TAURI_INVOKE<boolean>("unpair", undefined, options),
+	take: (key: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("take", { key }, options),
 	followed: (options?: InvokeOptions) => __TAURI_INVOKE<string | null>("followed", undefined, options),
 	stop: (key: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("stop", { key }, options),
 	tune: (key: string, model: string | null, mode: Mode | null, effort: string | null, options?: InvokeOptions) => __TAURI_INVOKE<string>("tune", { key, model, mode, effort }, options),

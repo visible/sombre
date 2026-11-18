@@ -142,6 +142,8 @@ export const forget = (id: string) => commands.forget(id);
 
 export const unpair = () => commands.unpair();
 
+export const take = (key: string) => commands.take(key);
+
 export const followed = () => commands.followed();
 
 export const tell = (key: string, id: string, answers: string[] | null) =>

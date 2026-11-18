@@ -153,6 +153,7 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
     if let Some(session) = rest {
         fill(session, shown);
     }
+    current(&engine);
     if history.is_empty() {
         crate::title::set(&view::folder(&engine.cwd));
     }
@@ -342,6 +343,7 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
                     crate::title::set(&text);
                 }
                 let (left, _) = turn(&mut engine, &text, &stop);
+                current(&engine);
                 carried = absorb(left, &mut pending, &mut draft, &mut held);
             }
             Input::Shell(command) if command.is_empty() => {
@@ -1352,6 +1354,12 @@ fn screen(engine: &Engine, history: &[Event]) -> usize {
         &engine.cwd,
     );
     view::history(history, &engine.cwd)
+}
+
+fn current(engine: &Engine) {
+    if let Some(id) = &engine.session {
+        crate::relay::follow(&format!("{}:{id}", engine.agent.name()));
+    }
 }
 
 fn fill(session: Session, shown: usize) {

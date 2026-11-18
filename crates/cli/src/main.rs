@@ -110,6 +110,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     if matches!(cli.command, None | Some(Action::Resume { .. })) {
+        relay::lock();
         relay::early();
     }
     let Some(action) = cli.command else {

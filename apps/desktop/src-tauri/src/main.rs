@@ -17,7 +17,7 @@ use sombre_core::{Agent, Roots, Session};
 use sombre_engine::{Engine, fallback, kept, recorded};
 use sombre_harness::config::{Config, Mode};
 use tauri::ipc::Channel;
-use tauri::{Manager, RunEvent, State};
+use tauri::{Emitter, Manager, RunEvent, State};
 
 use live::{Ask, Choice, Live, Tuning, Update};
 
@@ -806,6 +806,14 @@ async fn forget(live: State<'_, Live>, id: String) -> Result<bool, String> {
 
 #[tauri::command]
 #[specta::specta]
+fn take(live: State<'_, Live>, key: String) -> Result<(), String> {
+    sombre_pair::follow(&key);
+    sombre_pair::take();
+    live.tell(&key, Ask::Share(true))
+}
+
+#[tauri::command]
+#[specta::specta]
 async fn unpair() -> Result<bool, String> {
     blocking(sombre_pair::close).await
 }
@@ -872,6 +880,9 @@ static AWAKE: AtomicBool = AtomicBool::new(false);
 fn guard(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         loop {
+            if let Some(chat) = sombre_pair::stand() {
+                let _ = app.emit("continue", chat);
+            }
             let needed = app.state::<Live>().working() || sombre_pair::paired();
             sombre_harness::power::awake(AWAKE.load(Ordering::Relaxed) && needed);
             std::thread::sleep(std::time::Duration::from_secs(2));
@@ -898,6 +909,7 @@ fn bindings() -> tauri_specta::Builder<tauri::Wry> {
             phones,
             forget,
             unpair,
+            take,
             followed,
             stop,
             tune,

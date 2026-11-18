@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   Suspense,
@@ -24,6 +25,7 @@ import type { Agent, Change, Chat, Folder, Settings } from "./lib/api";
 import {
   agents,
   chats,
+  take,
   configure,
   defaults,
   failure,
@@ -170,6 +172,32 @@ export const App = () => {
     };
     read();
   }, [place]);
+
+  useEffect(() => {
+    const going = listen<string>("continue", async ({ payload: key }) => {
+      const found = await chats().catch(() => []);
+      setListing({ chats: found, state: "ready" });
+      const chosen = found.find((chat) => keyOf(chat.agent, chat.id) === key);
+      if (!chosen) {
+        return;
+      }
+      setOpen(target(chosen, key));
+      setView("chat");
+      await begin({
+        agent: chosen.agent,
+        effort: null,
+        folder: null,
+        id: chosen.id,
+        key,
+        mode: null,
+        model: null,
+      });
+      await take(key).catch(() => null);
+    });
+    return () => {
+      going.then((stop) => stop()).catch(() => null);
+    };
+  }, []);
 
   useEffect(() => {
     watch(load);
