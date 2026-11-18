@@ -1,16 +1,17 @@
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use sombre_core::Roots;
 use sombre_harness::config::Config;
-use tauri::{AppHandle, Emitter, State};
-use tauri_plugin_updater::UpdaterExt;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::live::Live;
 
 const PAUSE: Duration = Duration::from_secs(60 * 60);
 
 static READY: OnceLock<String> = OnceLock::new();
+static HELD: Mutex<Option<(Update, Vec<u8>)>> = Mutex::new(None);
 
 pub fn start(app: AppHandle) {
     if option_env!("SOMBRE_RELEASE").is_none() {
@@ -41,8 +42,16 @@ async fn install(app: &AppHandle) -> Result<Option<String>, tauri_plugin_updater
     let Some(update) = app.updater()?.check().await? else {
         return Ok(None);
     };
-    update.download_and_install(|_, _| {}, || {}).await?;
-    Ok(Some(update.version))
+    let bytes = update.download(|_, _| {}, || {}).await?;
+    let version = update.version.clone();
+    if cfg!(windows) {
+        if let Ok(mut held) = HELD.lock() {
+            *held = Some((update, bytes));
+        }
+    } else {
+        update.install(bytes)?;
+    }
+    Ok(Some(version))
 }
 
 #[tauri::command]
@@ -58,6 +67,14 @@ pub fn restart(app: AppHandle, live: State<'_, Live>) -> Result<(), String> {
         return Err(
             "a chat is still working. restart when it's done, or stop it first".to_string(),
         );
+    }
+    let held = HELD.lock().ok().and_then(|mut held| held.take());
+    live.close();
+    app.state::<crate::term::Terms>().close();
+    if let Some((update, bytes)) = held {
+        update
+            .install(bytes)
+            .map_err(|error| format!("couldn't install the update: {error}"))?;
     }
     app.restart()
 }

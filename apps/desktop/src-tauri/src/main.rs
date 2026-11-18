@@ -950,6 +950,16 @@ fn bindings() -> tauri_specta::Builder<tauri::Wry> {
         ])
 }
 
+#[cfg(target_os = "macos")]
+fn frameless(_: &tauri::App) {}
+
+#[cfg(not(target_os = "macos"))]
+fn frameless(app: &tauri::App) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_decorations(false);
+    }
+}
+
 fn main() {
     adopt();
     sombre_pair::named("desktop-pair.json");
@@ -977,6 +987,7 @@ fn main() {
         .build(tauri::generate_context!());
     match app {
         Ok(app) => {
+            frameless(&app);
             guard(app.handle().clone());
             update::start(app.handle().clone());
             if let Some(roots) = Roots::detect() {
