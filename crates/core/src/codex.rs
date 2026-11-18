@@ -454,8 +454,8 @@ mod tests {
         std::fs::write(&local, b"png bytes").unwrap_or_else(|error| panic!("{error}"));
         let pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
         let line = format!(
-            r#"{{"timestamp":"2026-11-18T01:02:03.004Z","type":"event_msg","payload":{{"type":"user_message","message":"what is in these","images":["data:image/png;base64,{pixel}"],"local_images":["{}"],"text_elements":[]}}}}"#,
-            local.display()
+            r#"{{"timestamp":"2026-11-18T01:02:03.004Z","type":"event_msg","payload":{{"type":"user_message","message":"what is in these","images":["data:image/png;base64,{pixel}"],"local_images":[{}],"text_elements":[]}}}}"#,
+            serde_json::to_string(&local.display().to_string()).unwrap_or_default()
         );
         let path = dir.path().join("rollout-a1.jsonl");
         std::fs::write(&path, format!("{line}\n")).unwrap_or_else(|error| panic!("{error}"));
