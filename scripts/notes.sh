@@ -5,7 +5,7 @@ tag="$1"
 previous="$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)"
 
 list() {
-  git log --reverse --format=%s "$previous..$tag" -- crates Cargo.toml Cargo.lock | sed -n "s/^$1: /- /p"
+  git log --reverse --format=%s "$previous..$tag" -- crates apps/desktop Cargo.toml Cargo.lock | sed -n "s/^$1: /- /p"
 }
 
 cat <<'EOF'
@@ -16,6 +16,14 @@ curl -fsSL https://sombre.si/install | sh
 ```powershell
 irm https://sombre.si/install.ps1 | iex
 ```
+
+the desktop app for mac:
+
+```sh
+curl -fsSL https://sombre.si/desktop | sh
+```
+
+or open `sombre.dmg` below. the cli and the app update themselves from here on.
 
 EOF
 
@@ -45,5 +53,5 @@ else
 fi
 
 cat <<'EOF'
-every file is in `SHA256SUMS`, which the installers check, and attested by this repo's release workflow: `gh attestation verify <file> -R visible/sombre`
+every file is in `SHA256SUMS`, which the installers check, and attested by this repo's release workflow: `gh attestation verify <file> -R visible/sombre`. updates only install when they're signed by sombre's release key
 EOF

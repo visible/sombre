@@ -6,7 +6,24 @@ on:
 permissions:
   contents: read
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          cargo="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          app="$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)"
+          if [ "v$cargo" != "$TAG" ] || [ "v$app" != "$TAG" ]; then
+            echo "::error::$TAG doesn't match Cargo.toml ($cargo) and tauri.conf.json ($app). bump both, then tag again"
+            exit 1
+          fi
   build:
+    needs: check
     strategy:
       fail-fast: false
       matrix:
@@ -27,7 +44,9 @@ jobs:
           targets: ${{ matrix.target }}
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
-      - run: cargo build --locked --release -p sombre --target ${{ matrix.target }}
+      - env:
+          SOMBRE_RELEASE: "1"
+        run: cargo build --locked --release -p sombre --target ${{ matrix.target }}
       - if: runner.os != 'Windows'
         run: tar -czf sombre-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release sombre
       - if: runner.os == 'Windows'
@@ -37,9 +56,58 @@ jobs:
           name: sombre-${{ matrix.target }}
           path: sombre-${{ matrix.target }}.*
           if-no-files-found: error
+  desktop:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun install --frozen-lockfile
+      - shell: bash
+        env:
+          SOMBRE_RELEASE: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::set the TAURI_SIGNING_PRIVATE_KEY secret, or installed apps can't update"
+            exit 1
+          fi
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "$(printenv "$name")" ]; then
+              unset "$name"
+            fi
+          done
+          bun run --filter desktop tauri build --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":true}}' 2>&1 | tee build.log
+          if grep -q "does not match the public key" build.log; then
+            echo "::error::the TAURI_SIGNING_PRIVATE_KEY secret isn't the key sombre's public key belongs to"
+            exit 1
+          fi
+          bundle=target/universal-apple-darwin/release/bundle
+          mkdir out
+          cp "$bundle/macos/sombre.app.tar.gz" out/sombre.app.tar.gz
+          cp "$bundle/macos/sombre.app.tar.gz.sig" out/sombre.app.tar.gz.sig
+          cp "$bundle"/dmg/*.dmg out/sombre.dmg
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sombre-desktop
+          path: out/*
+          if-no-files-found: error
   publish:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, desktop]
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -53,13 +121,33 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
-      - run: sha256sum sombre-* > SHA256SUMS
-      - uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: sombre-*
       - env:
-          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::set the TAURI_SIGNING_PRIVATE_KEY secret, or installed copies of sombre can't update"
+            exit 1
+          fi
+          for file in sombre-*.tar.gz sombre-*.zip; do
+            npx --yes @tauri-apps/cli@2.12.4 signer sign --app-version "${TAG#v}" "$file" > /dev/null
+          done
+      - env:
           TAG: ${{ github.ref_name }}
         run: |
           sh scripts/notes.sh "$TAG" > notes.md
-          gh release create "$TAG" sombre-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$TAG" --notes-file notes.md
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/sombre.app.tar.gz"
+          jq -n --arg version "${TAG#v}" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg signature "$(cat sombre.app.tar.gz.sig)" --arg url "$url" \
+            '{version: $version, pub_date: $date, platforms: {"darwin-aarch64": {signature: $signature, url: $url}, "darwin-x86_64": {signature: $signature, url: $url}}}' > latest.json
+          sha256sum sombre-* sombre.* latest.json > SHA256SUMS
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            sombre-*
+            sombre.*
+            latest.json
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" sombre-* sombre.* latest.json SHA256SUMS --repo "$GITHUB_REPOSITORY" --title "$TAG" --notes-file notes.md
