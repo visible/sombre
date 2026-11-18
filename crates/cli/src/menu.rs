@@ -534,9 +534,11 @@ impl Input {
         let text = done.ok_or_else(|| io::Error::new(io::ErrorKind::Interrupted, "cancelled"))?;
         if !text.is_empty() {
             line(&format!(
-                "  {}  {}",
-                dim(&self.title),
-                masked(&text, self.mask)
+                "  {}",
+                crate::view::clip(
+                    &format!("{}  {}", dim(&self.title), masked(&text, self.mask)),
+                    width().saturating_sub(3)
+                )
             ));
         }
         Ok(text)

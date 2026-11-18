@@ -60,6 +60,8 @@ enum Entry {
     Pairing(String, crate::relay::Reach),
     Typed(bool, String),
     Stepped,
+    Banner,
+    Printed(String),
 }
 
 fn replaying() -> bool {
@@ -388,6 +390,13 @@ fn steering(text: &str, columns: usize) -> Vec<String> {
         .collect()
 }
 
+pub fn printed(text: &str) {
+    keep(Entry::Printed(text.to_string()));
+    for row in wrap(text, width().saturating_sub(3).max(10)) {
+        put(&format!("  {}", dim(&row)));
+    }
+}
+
 pub fn typed(shell: bool, text: &str) {
     keep(Entry::Typed(shell, text.to_string()));
     if ECHOED.load(Ordering::Relaxed) {
@@ -396,7 +405,7 @@ pub fn typed(shell: bool, text: &str) {
     let rows = if shell {
         crate::compose::lines(text, shell, None, width())
     } else {
-        card(text, usize::MAX, width())
+        card(text, 12, width())
     };
     for line in rows {
         put(&line);
@@ -440,6 +449,8 @@ fn show(entry: Entry) {
         Entry::Pairing(url, reach) => pairing(&url, reach),
         Entry::Typed(shell, text) => typed(shell, &text),
         Entry::Stepped => stepped(),
+        Entry::Banner => banner(),
+        Entry::Printed(text) => printed(&text),
     }
 }
 
@@ -727,14 +738,21 @@ fn pairs(rows: &[(&str, &str)], lead: fn(&str) -> String) {
     let left = rows.iter().map(|(key, _)| key.width()).max().unwrap_or(0);
     let stacked = room < left + 2 + 24;
     for (key, about) in rows {
+        let single = |room: usize| {
+            if about.contains(' ') {
+                wrap(about, room)
+            } else {
+                vec![shorten(about, room)]
+            }
+        };
         if stacked {
             put(&format!("  {}", lead(key)));
-            for line in wrap(about, room.saturating_sub(2)) {
+            for line in single(room.saturating_sub(2)) {
                 put(&format!("    {}", dim(&line)));
             }
             continue;
         }
-        for (index, line) in wrap(about, room - left - 2).iter().enumerate() {
+        for (index, line) in single(room - left - 2).iter().enumerate() {
             let key = if index == 0 {
                 lead(&pad(key, left))
             } else {
@@ -802,6 +820,7 @@ pub fn version() {
 }
 
 pub fn banner() {
+    keep(Entry::Banner);
     let version = env!("CARGO_PKG_VERSION");
     put(&clip(
         &format!(
@@ -922,7 +941,9 @@ pub fn card(body: &str, most: usize, columns: usize) -> Vec<String> {
         })
         .collect();
     if lines.len() > most {
-        rows.push(format!("{bar} {}", dim("…")));
+        let more = lines.len() - most;
+        let noun = if more == 1 { "line" } else { "lines" };
+        rows.push(format!("{bar} {}", dim(&format!("… {more} more {noun}"))));
     }
     rows
 }
@@ -1050,8 +1071,12 @@ pub fn relative(text: &str, cwd: &Path) -> String {
 pub fn row(label: &str, detail: &str, cwd: &Path) -> String {
     let detail = relative(detail, cwd);
     let detail = detail.lines().next().unwrap_or_default();
+    let label = fit(label, width() / 2);
     let room = width().saturating_sub(label.width() + 6).max(10);
-    format!("  ● {label} {}", dim(&fit(detail, room)))
+    clip(
+        &format!("  ● {label} {}", dim(&fit(detail, room))),
+        width().saturating_sub(1),
+    )
 }
 
 fn shorten(part: &str, room: usize) -> String {
@@ -1118,7 +1143,10 @@ pub fn tallied(counts: &[(String, usize)]) -> String {
         .iter()
         .map(|(label, count)| format!("{} {}", bold(label), dim(&format!("×{count}"))))
         .collect();
-    format!("  ● {}", parts.join("  "))
+    clip(
+        &format!("  ● {}", parts.join(" · ")),
+        width().saturating_sub(1),
+    )
 }
 
 pub fn tally(counts: &[(String, usize)]) {
@@ -1300,6 +1328,7 @@ pub fn failed(message: &str) {
 fn failure(message: &str, columns: usize) -> Vec<String> {
     let room = columns.saturating_sub(5).max(10);
     let mut rows = Vec::new();
+    let message = sombre_core::scrub::scrub(message);
     for (index, paragraph) in message
         .lines()
         .map(str::trim)
@@ -1383,11 +1412,17 @@ pub fn pulse(since: Duration) -> String {
 }
 
 pub fn spin() {
-    print!("\r• {}", dim("working · ctrl-c to stop"));
+    if crate::pane::pinned() {
+        return;
+    }
+    print!("\r• {}", dim("loading models"));
     let _ = io::stdout().flush();
 }
 
 pub fn clear() {
+    if crate::pane::pinned() {
+        return;
+    }
     print!("\r\x1b[2K");
     let _ = io::stdout().flush();
 }
@@ -1581,7 +1616,7 @@ mod tests {
             .iter()
             .map(|row| crate::dock::bare(row))
             .collect();
-        assert_eq!(cut, ["┃ a", "┃ b", "┃ …"]);
+        assert_eq!(cut, ["┃ a", "┃ b", "┃ … 1 more line"]);
     }
 
     #[test]
@@ -1684,6 +1719,21 @@ mod tests {
         prose.partial.push_str("half");
         prose.source.push_str("first line\nhalf");
         assert_eq!(prose.emitted(), "first line\n");
+    }
+
+    #[test]
+    fn a_long_path_keeps_its_end_when_it_has_no_room() {
+        let path = "/private/tmp/sombre-test/qa/sombre/config.toml";
+        let shown = shorten(path, 30);
+        assert!(
+            shown.starts_with('…') && shown.ends_with("/sombre/config.toml"),
+            "{shown}"
+        );
+        assert!(shown.width() <= 30);
+        assert_eq!(
+            shorten("~/.sombre/config.toml", 30),
+            "~/.sombre/config.toml"
+        );
     }
 
     #[test]

@@ -468,6 +468,11 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
             Input::New => {
                 engine.stop();
                 engine.session = None;
+                engine.left = None;
+                engine.cost = None;
+                engine.goal = None;
+                notes.clear();
+                target = None;
                 view::wipe();
                 let _ = screen(&engine, &[]);
                 crate::title::set(&view::folder(&engine.cwd));
@@ -632,10 +637,35 @@ pub fn pick<'a>(sessions: &'a [Session], cwd: &Path, all: bool) -> Option<&'a Se
     local.get(choice).copied()
 }
 
+fn closed(errors: &[String]) -> Option<&str> {
+    let lines: Vec<&str> = errors
+        .iter()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .collect();
+    lines
+        .iter()
+        .find(|line| line.to_lowercase().contains("error") && !line.starts_with("at "))
+        .or_else(|| lines.last())
+        .copied()
+}
+
+fn unstarted(agent: Agent, error: &io::Error) -> String {
+    if error.kind() == io::ErrorKind::NotFound && agent != Agent::Sombre {
+        return format!(
+            "{} isn't installed. /provider installs it, or /agent switches to another agent",
+            agent.name()
+        );
+    }
+    let text = error.to_string();
+    let text = text
+        .split_once(" (os error")
+        .map_or(text.as_str(), |(plain, _)| plain);
+    format!("couldn't start {}: {text}", agent.name())
+}
+
 fn command_line(command: &str, cwd: &Path, stop: &AtomicBool) -> Option<String> {
-    let ran = shell::run(command, cwd, stop, false, |line| {
-        view::line(&format!("  {}", view::dim(line)));
-    });
+    let ran = shell::run(command, cwd, stop, false, view::printed);
     view::stepped();
     match ran {
         Ok(ran) => {
@@ -897,7 +927,12 @@ fn device(roots: &Roots) {
                                 "  sombre needs administrator approval to keep it running with the lid closed"
                             );
                         }
-                        power::hold(&mark)
+                        let hushed = crate::dock::aloud();
+                        let held = power::hold(&mark);
+                        if hushed {
+                            crate::dock::hush();
+                        }
+                        held
                     }
                     Lid::Running | Lid::Stuck => power::free(&mark),
                     Lid::Missing => Ok(()),
@@ -1368,13 +1403,14 @@ fn permissions(engine: &Engine) -> Option<Mode> {
             |menu, mode| {
                 let hint = about(engine.agent, mode);
                 let hint = if mode == engine.mode {
-                    format!("{hint}  current")
+                    format!("{hint} · current")
                 } else {
                     hint.to_string()
                 };
                 menu.item(mode, mode.name(), hint)
             },
         )
+        .quiet()
         .initial_value(engine.mode)
         .interact()
         .ok()
@@ -1383,10 +1419,12 @@ fn permissions(engine: &Engine) -> Option<Mode> {
 fn effort(engine: &Engine) -> Option<Option<String>> {
     let current = engine.level().unwrap_or("default").to_string();
     let mark = |name: &str, hint: &str| {
-        if name == current {
-            format!("{hint}  current").trim().to_string()
-        } else {
+        if name != current {
             hint.to_string()
+        } else if hint.is_empty() {
+            "current".to_string()
+        } else {
+            format!("{hint} · current")
         }
     };
     let menu = crate::menu::select(format!("reasoning effort for {}", engine.name())).item(
@@ -1400,6 +1438,7 @@ fn effort(engine: &Engine) -> Option<Option<String>> {
         .fold(menu, |menu, level| {
             menu.item((*level).to_string(), *level, mark(level, ""))
         })
+        .quiet()
         .initial_value(current)
         .interact()
         .ok()
@@ -1617,7 +1656,7 @@ fn choose(roots: &Roots, engine: &Engine) -> Option<String> {
         crate::menu::select(format!("model for {}", engine.name())),
         |menu, model| {
             let hint = if current.as_deref() == Some(model.id.as_str()) {
-                format!("{}  current", model.about)
+                format!("{} · current", model.about)
             } else {
                 model.about.clone()
             };
@@ -1633,7 +1672,7 @@ fn choose(roots: &Roots, engine: &Engine) -> Option<String> {
     } else {
         menu
     };
-    menu.interact().ok()
+    menu.quiet().interact().ok()
 }
 
 fn model(engine: &mut Engine, roots: Option<&Roots>, name: String) {
@@ -1669,10 +1708,7 @@ fn begin(
 ) -> (Draft, Outcome) {
     stop.store(false, Ordering::SeqCst);
     if let Err(error) = start(engine) {
-        view::failed(&format!(
-            "couldn't start {}: {error}. is it installed and on your PATH?",
-            engine.agent.name()
-        ));
+        view::failed(&unstarted(engine.agent, &error));
         return (
             Draft::default(),
             Outcome {
@@ -1859,12 +1895,10 @@ fn pump(
                 final_plan(&mut latest, &engine.cwd);
                 prose.finish();
                 engine.stop();
-                let reason = errors
-                    .iter()
-                    .rev()
-                    .find(|line| !line.trim().is_empty())
-                    .map_or("the agent stopped without an answer", String::as_str);
-                view::failed(reason);
+                view::failed(&closed(&errors).map_or_else(
+                    || format!("{} stopped without an answer", engine.name()),
+                    |line| format!("{} stopped: {line}", engine.name()),
+                ));
                 outcome.failed = true;
                 return false;
             }
@@ -2231,6 +2265,34 @@ fn follow(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_closed_agent_names_its_error_line_not_its_last() {
+        let node: Vec<String> = [
+            "/opt/claude/cli.js:12",
+            "Error: Cannot find module 'yoga'",
+            "    at Module._resolveFilename (node:internal/modules:1)",
+            "",
+            "Node.js v22.1.0",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        assert_eq!(closed(&node), Some("Error: Cannot find module 'yoga'"));
+        let plain = vec!["something odd happened".to_string(), String::new()];
+        assert_eq!(closed(&plain), Some("something odd happened"));
+        assert_eq!(closed(&[]), None);
+    }
+
+    #[test]
+    fn a_missing_agent_says_how_to_install_it() {
+        let missing = io::Error::from(io::ErrorKind::NotFound);
+        assert_eq!(
+            unstarted(Agent::Codex, &missing),
+            "codex isn't installed. /provider installs it, or /agent switches to another agent"
+        );
+        let denied = io::Error::from_raw_os_error(13);
+        assert!(!unstarted(Agent::Claude, &denied).contains("os error"));
+    }
 
     #[test]
     fn phone_commands_that_need_a_picker_get_a_hint_instead() {

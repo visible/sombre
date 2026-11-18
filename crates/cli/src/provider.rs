@@ -41,7 +41,7 @@ pub fn pick(roots: &Roots, current: Option<String>) -> Option<Target> {
     };
     let mark = |name: &str, hint: String| {
         if current.as_deref() == Some(name) {
-            format!("{hint}  current")
+            format!("{hint} · current")
         } else {
             hint
         }

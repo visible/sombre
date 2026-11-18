@@ -71,10 +71,13 @@ impl Composer {
     }
 
     pub fn paste(&mut self, text: &str) {
-        let text = text.replace("\r\n", "\n").replace('\r', "\n");
+        let text = text
+            .replace("\r\n", "\n")
+            .replace('\r', "\n")
+            .replace('\t', "    ");
         let text: String = text
             .chars()
-            .filter(|character| *character == '\n' || *character == '\t' || !character.is_control())
+            .filter(|character| *character == '\n' || !character.is_control())
             .collect();
         if text.chars().count() > LONG {
             let lines = text.trim_end().lines().count().max(1);
@@ -406,7 +409,14 @@ pub fn lines(text: &str, shell: bool, hint: Option<&str>, columns: usize) -> Vec
     let found = rows(text, room);
     let mut shown: Vec<String> = found
         .iter()
-        .map(|range| format!("{lead} {}", &text[range.clone()]))
+        .enumerate()
+        .map(|(index, range)| {
+            if shell && index > 0 {
+                format!("  {}", &text[range.clone()])
+            } else {
+                format!("{lead} {}", &text[range.clone()])
+            }
+        })
         .collect();
     if let (Some(hint), Some(last), Some(range)) = (hint, shown.last_mut(), found.last()) {
         let used = text[range.clone()]
@@ -679,6 +689,13 @@ mod tests {
 
     fn press(composer: &mut Composer, code: KeyCode, modifiers: KeyModifiers) -> Key {
         composer.press(code, modifiers, false)
+    }
+
+    #[test]
+    fn pasted_tabs_become_spaces_so_the_caret_stays_in_line() {
+        let mut composer = Composer::default();
+        composer.paste("fn main() {\n\tgo()\n}");
+        assert_eq!(composer.text, "fn main() {\n    go()\n}");
     }
 
     #[test]
