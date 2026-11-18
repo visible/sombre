@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Paired, Phone as Device } from "../lib/api";
 import { failure, forget, pair, phones, unpair } from "../lib/api";
 import { Copy } from "./copy";
-import { secondary } from "./field";
+import { primary, secondary } from "./field";
 import { Sheet } from "./sheet";
 
 interface Props {
@@ -75,6 +75,9 @@ const Pairing = ({ chatKey, onClose }: Props) => {
 
   return (
     <Sheet busy={false} onClose={onClose} open title="pair a phone">
+      <p className="text-fog font-sans text-[13px]">
+        continue this chat from your phone&apos;s browser
+      </p>
       <div className="mt-4 flex flex-col gap-4 text-[12.5px]">
         {paired ? (
           <>
@@ -84,16 +87,16 @@ const Pairing = ({ chatKey, onClose }: Props) => {
                 className="size-40 shrink-0 rounded-lg"
                 src={`data:image/svg+xml;utf8,${encodeURIComponent(paired.code)}`}
               />
-              <div className="flex min-w-0 flex-col gap-2">
-                <p className="text-paper">
+              <div className="flex min-w-0 flex-col gap-2 pt-0.5">
+                <p className="text-paper font-sans text-[13.5px] font-medium">
                   scan this with your phone&apos;s camera
                 </p>
-                <p className="text-fog">
-                  it opens this chat in your phone&apos;s browser,{" "}
-                  {paired.reach}. the link holds the key and works once.
+                <p className="text-fog font-sans text-[13px] leading-[1.55]">
+                  it opens this chat {paired.reach}. the link holds the key and
+                  works once.
                 </p>
-                <div className="bg-ink flex min-w-0 items-center gap-1 rounded-lg py-1 pr-1 pl-2.5">
-                  <span className="text-body min-w-0 flex-1 truncate">
+                <div className="bg-ink border-rim mt-1 flex min-w-0 items-center gap-1 rounded-lg border py-1 pr-1 pl-2.5">
+                  <span className="text-body min-w-0 flex-1 truncate text-[12px]">
                     {paired.link}
                   </span>
                   <Copy text={paired.link} />
@@ -121,17 +124,23 @@ const Pairing = ({ chatKey, onClose }: Props) => {
           </>
         ) : null}
         {!paired && busy ? (
-          <output className="text-fog">making a link for this chat</output>
+          <output className="flex items-start gap-4">
+            <span className="bg-well size-40 shrink-0 rounded-lg motion-safe:animate-pulse" />
+            <span className="text-fog pt-0.5 font-sans text-[13px]">
+              making a link for this chat
+            </span>
+          </output>
         ) : null}
         {problem ? (
-          <div className="flex flex-col items-start gap-2" role="alert">
-            <p className="text-paper">{problem}</p>
+          <div
+            className="bg-ink border-rim flex flex-col items-start gap-3 rounded-lg border p-3.5"
+            role="alert"
+          >
+            <p className="text-paper font-sans text-[13px] leading-[1.55]">
+              {problem}
+            </p>
             <div className="flex flex-wrap gap-2">
-              <button
-                className={secondary}
-                onClick={() => link()}
-                type="button"
-              >
+              <button className={primary} onClick={() => link()} type="button">
                 try again
               </button>
               <button
@@ -144,16 +153,30 @@ const Pairing = ({ chatKey, onClose }: Props) => {
             </div>
           </div>
         ) : null}
-        <div className="border-rim flex flex-col gap-1 border-t pt-3">
-          <p className="text-fog">paired phones</p>
+        <section className="border-rim flex flex-col gap-2 border-t pt-4">
+          <h3 className="text-fog font-sans text-[12.5px]">paired phones</h3>
           {devices.length === 0 ? (
-            <p className="text-fog">none yet</p>
+            <p className="text-fog font-sans text-[13px]">
+              none yet. phones you pair show up here
+            </p>
           ) : (
             devices.map((device) => (
-              <div className="flex items-center gap-2" key={device.id}>
-                <span className="text-paper min-w-0 flex-1 truncate">
+              <div className="flex items-center gap-2.5" key={device.id}>
+                <svg
+                  aria-hidden="true"
+                  className="text-fog size-4 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeWidth="1.3"
+                  viewBox="0 0 16 16"
+                >
+                  <rect height="13" rx="2" width="8" x="4" y="1.5" />
+                  <path d="M7 12.5h2" />
+                </svg>
+                <span className="text-paper min-w-0 flex-1 truncate font-sans text-[13px]">
                   {device.label}
-                  <span className="text-fog">{`  paired ${ago(device.since)}`}</span>
+                  <span className="text-fog">{` · paired ${ago(device.since)}`}</span>
                 </span>
                 <button
                   className={secondary}
@@ -168,7 +191,7 @@ const Pairing = ({ chatKey, onClose }: Props) => {
               </div>
             ))
           )}
-        </div>
+        </section>
       </div>
     </Sheet>
   );

@@ -24,7 +24,7 @@ export const Sheet = ({ open, title, busy, children, onClose }: Props) => {
   return (
     <dialog
       aria-label={title}
-      className="border-rim bg-raise text-body backdrop:bg-ink/60 m-auto w-[min(460px,90vw)] rounded-2xl border p-5 shadow-[0_24px_80px_rgb(0_0_0/0.6)]"
+      className="border-rim bg-raise text-body backdrop:bg-ink/60 shadow-lift relative m-auto w-[min(460px,90vw)] rounded-2xl border p-5 outline-none focus-visible:outline-none"
       onCancel={(event) => {
         if (busy) {
           event.preventDefault();
@@ -33,7 +33,31 @@ export const Sheet = ({ open, title, busy, children, onClose }: Props) => {
       onClose={onClose}
       ref={dialog}
     >
-      <h2 className="text-paper text-[14px] font-semibold">{title}</h2>
+      <div className="mb-1 flex items-start justify-between gap-3">
+        <h2 className="text-paper pt-0.5 font-sans text-[15px] font-medium">
+          {title}
+        </h2>
+        <button
+          aria-label="close"
+          className="text-fog hover:bg-well hover:text-paper active:bg-rim -mt-1 -mr-1.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg disabled:cursor-default disabled:opacity-40"
+          disabled={busy}
+          onClick={() => dialog.current?.close()}
+          title="close (esc)"
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            className="size-3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.5"
+            viewBox="0 0 16 16"
+          >
+            <path d="M4 4l8 8M12 4l-8 8" />
+          </svg>
+        </button>
+      </div>
       {children}
     </dialog>
   );
