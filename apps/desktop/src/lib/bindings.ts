@@ -51,6 +51,8 @@ export const commands = {
 	resize: (key: string, cols: number, rows: number, options?: InvokeOptions) => __TAURI_INVOKE<null>("resize", { key, cols, rows }, options),
 	hangup: (key: string, options?: InvokeOptions) => __TAURI_INVOKE<void>("hangup", { key }, options),
 	shot: (name: string, options?: InvokeOptions) => __TAURI_INVOKE<string>("shot", { name }, options),
+	ready: (options?: InvokeOptions) => __TAURI_INVOKE<string | null>("ready", undefined, options),
+	restart: (options?: InvokeOptions) => __TAURI_INVOKE<null>("restart", undefined, options),
 };
 
 export type Agent = "claude" | "codex" | "sombre";

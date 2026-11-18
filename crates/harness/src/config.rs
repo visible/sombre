@@ -77,6 +77,8 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tailscale: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor: Option<String>,

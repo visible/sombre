@@ -51,5 +51,14 @@
       "icons/icon.png",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/visible/sombre/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE4NUZDNkE5NTk3NzlGOTkKUldTWm4zZFpxY1pmcUorQTNPVzdZNkZ6blNRRm9KUWJFSktSR1RRL25IR2JkNnh5cXVVK2FOMk4K",
+      "requireSignedVersion": true
+    }
   }
 }

@@ -31,6 +31,7 @@ import { Logo } from "./logo";
 import { Mark } from "./mark";
 import { Notice } from "./notice";
 import { Divider, Option, Popover } from "./popover";
+import { Update } from "./update";
 
 export type Listing =
   | { state: "loading" }
@@ -1171,6 +1172,7 @@ export const Sidebar = ({
         ) : null}
         {listing.state === "ready" && shelved.total > 0 ? body() : null}
       </nav>
+      <Update />
       <footer className="border-rim flex shrink-0 items-center gap-1 border-t p-2">
         <button
           className="text-fog hover:bg-raise hover:text-paper active:bg-well flex h-8 flex-1 cursor-pointer items-center gap-2 rounded-lg px-2 text-left text-[13px]"

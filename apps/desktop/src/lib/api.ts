@@ -144,6 +144,10 @@ export const unpair = () => commands.unpair();
 
 export const take = (key: string) => commands.take(key);
 
+export const ready = () => commands.ready();
+
+export const restart = () => commands.restart();
+
 export const followed = () => commands.followed();
 
 export const tell = (key: string, id: string, answers: string[] | null) =>

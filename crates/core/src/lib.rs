@@ -8,6 +8,7 @@ mod index;
 pub mod ledger;
 pub mod pasted;
 pub mod purge;
+pub mod release;
 pub mod scrub;
 pub mod server;
 mod session;

@@ -17,6 +17,7 @@ mod question;
 mod size;
 mod streak;
 mod title;
+mod update;
 mod view;
 
 use std::env;
@@ -80,6 +81,8 @@ enum Action {
         #[arg(long, help = "pick from every folder, not just this one")]
         all: bool,
     },
+    #[command(about = "install the newest sombre now. it also updates itself once a day")]
+    Update,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -100,7 +103,12 @@ impl Source {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let code = run(Cli::parse());
+    update::notice();
+    code
+}
+
+fn run(cli: Cli) -> ExitCode {
     if cli.version {
         view::version();
         return ExitCode::SUCCESS;
@@ -112,10 +120,14 @@ fn main() -> ExitCode {
     if matches!(cli.command, None | Some(Action::Resume { .. })) {
         relay::lock();
         relay::early();
+        update::background();
     }
     let Some(action) = cli.command else {
         return chat::run(start(cli.agent, cwd), &[], None);
     };
+    if matches!(action, Action::Update) {
+        return update::run();
+    }
     if let Action::Relay { port } = action {
         return match relay::serve(port) {
             Ok(()) => ExitCode::SUCCESS,
@@ -147,7 +159,7 @@ fn main() -> ExitCode {
         Action::Resume { id: None, all } => {
             chat::pick(&sessions, &cwd, all).map_or(ExitCode::SUCCESS, enter)
         }
-        Action::Relay { .. } => ExitCode::SUCCESS,
+        Action::Relay { .. } | Action::Update => ExitCode::SUCCESS,
     }
 }
 

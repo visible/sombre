@@ -6,6 +6,7 @@ mod live;
 mod settings;
 mod shot;
 mod term;
+mod update;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -943,7 +944,9 @@ fn bindings() -> tauri_specta::Builder<tauri::Wry> {
             input,
             resize,
             hangup,
-            shot::shot
+            shot::shot,
+            update::ready,
+            update::restart
         ])
 }
 
@@ -965,6 +968,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Known::default())
         .manage(Live::default())
         .manage(term::Terms::default())
@@ -974,6 +978,7 @@ fn main() {
     match app {
         Ok(app) => {
             guard(app.handle().clone());
+            update::start(app.handle().clone());
             if let Some(roots) = Roots::detect() {
                 let _ = app
                     .asset_protocol_scope()
@@ -995,6 +1000,16 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_updater_trusts_the_release_key() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap_or_default();
+        assert_eq!(
+            config["plugins"]["updater"]["pubkey"].as_str(),
+            Some(sombre_core::release::KEY)
+        );
+    }
+
     #[test]
     fn the_typescript_bindings_match_the_commands() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/bindings.ts");
