@@ -856,6 +856,7 @@ impl Session {
                 outbox.drain(..).collect()
             };
             for (key, message) in merged(batch) {
+                let message = resolved(message);
                 if let Some(sealed) = seal(&key, message.to_string().as_bytes()) {
                     let _ = self.link.call("POST", "out", "", &sealed);
                 }
@@ -1602,19 +1603,89 @@ fn served(name: &str, built: &str) -> String {
         .unwrap_or_else(|| built.to_string())
 }
 
+fn pending(path: &Path) -> Value {
+    json!({"path": path.display().to_string()})
+}
+
 fn picture(path: &Path) -> Value {
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let small = std::fs::metadata(path).is_ok_and(|meta| meta.len() <= PICTURE);
-    match small
-        .then(|| sombre_harness::image::url(path).ok())
-        .flatten()
+    let stamp = std::fs::metadata(path).ok();
+    let size = stamp.as_ref().map_or(u64::MAX, std::fs::Metadata::len);
+    let changed = stamp.and_then(|meta| meta.modified().ok());
+    if let Ok(cached) = SHRUNK.lock()
+        && let Some((_, _, src)) = cached
+            .iter()
+            .find(|(known, when, _)| known == path && *when == changed)
     {
-        Some(src) => json!({"name": name, "src": src}),
-        None => json!({"name": name}),
+        return json!({"name": name, "src": src});
     }
+    let src = if size <= LIGHT {
+        sombre_harness::image::url(path).ok()
+    } else {
+        shrunk(path).or_else(|| {
+            (size <= PICTURE)
+                .then(|| sombre_harness::image::url(path).ok())
+                .flatten()
+        })
+    };
+    let Some(src) = src else {
+        return json!({"name": name});
+    };
+    if let Ok(mut cached) = SHRUNK.lock() {
+        cached.push((path.to_path_buf(), changed, src.clone()));
+        if cached.len() > 16 {
+            cached.remove(0);
+        }
+    }
+    json!({"name": name, "src": src})
+}
+
+type Shrunk = (PathBuf, Option<SystemTime>, String);
+
+static SHRUNK: Mutex<Vec<Shrunk>> = Mutex::new(Vec::new());
+
+const LIGHT: u64 = 512 * 1024;
+const LONGEST: u32 = 1600;
+
+fn shrunk(path: &Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    let found = image::load_from_memory(&bytes).ok()?;
+    let fitted = if found.width().max(found.height()) > LONGEST {
+        found.thumbnail(LONGEST, LONGEST)
+    } else {
+        found
+    };
+    let mut flat = image::RgbImage::new(fitted.width(), fitted.height());
+    for (x, y, pixel) in fitted.to_rgba8().enumerate_pixels() {
+        let [red, green, blue, alpha] = pixel.0;
+        let over = |channel: u8| {
+            let mixed =
+                (u16::from(channel) * u16::from(alpha) + 255 * (255 - u16::from(alpha))) / 255;
+            u8::try_from(mixed).unwrap_or(u8::MAX)
+        };
+        flat.put_pixel(x, y, image::Rgb([over(red), over(green), over(blue)]));
+    }
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 82)
+        .encode_image(&flat)
+        .ok()?;
+    Some(format!("data:image/jpeg;base64,{}", STANDARD.encode(out)))
+}
+
+fn resolved(mut message: Value) -> Value {
+    let swap = |slot: &mut Value| {
+        if let Some(path) = slot["path"].as_str() {
+            *slot = picture(Path::new(path));
+        }
+    };
+    swap(&mut message["image"]);
+    if let Some(images) = message["images"].as_array_mut() {
+        images.iter_mut().for_each(swap);
+    }
+    message
 }
 
 fn pictured(detail: &str) -> bool {
@@ -1632,7 +1703,7 @@ pub fn said(text: &str, images: &[std::path::PathBuf]) {
     if !paired() {
         return;
     }
-    let images: Vec<Value> = images.iter().map(|path| picture(path)).collect();
+    let images: Vec<Value> = images.iter().map(|path| pending(path)).collect();
     post(&json!({"kind": "user", "text": text, "images": images}));
 }
 
@@ -1653,11 +1724,11 @@ pub fn shown(item: &sombre_core::Event) -> Vec<Value> {
     {
         return vec![
             json!({"kind": "step", "label": label, "detail": detail}),
-            json!({"kind": "image", "image": picture(Path::new(detail))}),
+            json!({"kind": "image", "image": pending(Path::new(detail))}),
         ];
     }
     let shown = match item {
-        Event::Image(path) => json!({"kind": "image", "image": picture(Path::new(path))}),
+        Event::Image(path) => json!({"kind": "image", "image": pending(Path::new(path))}),
         Event::Delta(text) => json!({"kind": "delta", "text": text}),
         Event::Text(text) => json!({"kind": "text", "text": text}),
         Event::Step { label, detail, .. } => {
@@ -1800,6 +1871,39 @@ mod tests {
         );
         assert_eq!(outbox[1].1["key"], json!(URL_SAFE_NO_PAD.encode(fresh)));
         assert_eq!(outbox[2].1["again"], json!(true));
+    }
+
+    #[test]
+    fn big_pictures_reach_the_phone_as_small_jpegs_and_small_ones_as_they_are() {
+        let dir = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let big = dir.path().join("screen.png");
+        let mut seed = 7_u32;
+        let noisy = image::RgbaImage::from_fn(2000, 400, |x, _| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let [red, green, blue, _] = seed.to_le_bytes();
+            image::Rgba([red, green, blue, if x < 100 { 0 } else { 255 }])
+        });
+        noisy.save(&big).unwrap_or_else(|error| panic!("{error}"));
+        assert!(std::fs::metadata(&big).map_or(0, |meta| meta.len()) > LIGHT);
+        let message = resolved(json!({"kind": "image", "image": pending(&big)}));
+        let src = message["image"]["src"].as_str().unwrap_or_default();
+        let data = src
+            .strip_prefix("data:image/jpeg;base64,")
+            .unwrap_or_default();
+        let bytes = STANDARD.decode(data).unwrap_or_default();
+        let shown = image::load_from_memory(&bytes).unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!((shown.width(), shown.height()), (1600, 320));
+        assert_eq!(message["image"]["name"], "screen.png");
+        let small = dir.path().join("dot.png");
+        image::RgbImage::new(8, 8)
+            .save(&small)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let message = resolved(json!({"kind": "user", "text": "hi", "images": [pending(&small)]}));
+        assert!(
+            message["images"][0]["src"]
+                .as_str()
+                .is_some_and(|src| src.starts_with("data:image/png;base64,"))
+        );
     }
 
     #[test]
