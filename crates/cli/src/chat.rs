@@ -2,8 +2,8 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use sombre_core::event::Event;
@@ -155,7 +155,7 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
     resumed(&mut engine, history, roots.as_ref());
     let shown = screen(&engine, history);
     if let Some(session) = rest {
-        fill(session, shown);
+        fill(session, shown, hello(&engine, true));
     }
     current(&engine);
     if history.is_empty() {
@@ -168,9 +168,7 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
     }
     match crate::relay::resume() {
         Ok(true) => {
-            for item in shared(&engine) {
-                crate::relay::post(&item);
-            }
+            share(hello(&engine, true), None);
             view::note("your paired phone follows this chat");
         }
         Ok(false) => {}
@@ -472,8 +470,10 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
                     view::wipe();
                     let shown = screen(&engine, &history);
                     if !whole {
-                        fill(session.clone(), shown);
+                        fill(session.clone(), shown, hello(&engine, true));
                     }
+                    current(&engine);
+                    share(hello(&engine, true), None);
                     view::note(&format!("back in {}", session.title));
                     crate::title::set(&session.title);
                 }
@@ -488,6 +488,7 @@ pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> Exit
                 target = None;
                 view::wipe();
                 let _ = screen(&engine, &[]);
+                share(hello(&engine, true), None);
                 crate::title::set(&view::folder(&engine.cwd));
             }
             Input::Current => view::note(&format!(
@@ -1444,8 +1445,11 @@ fn current(engine: &Engine) {
     }
 }
 
-fn fill(session: Session, shown: usize) {
-    std::thread::spawn(move || view::backfill(&transcript(&session), &session.cwd, shown));
+fn fill(session: Session, shown: usize, hello: serde_json::Value) {
+    std::thread::spawn(move || {
+        view::backfill(&transcript(&session), &session.cwd, shown);
+        share(hello, Some(shown));
+    });
 }
 
 fn permissions(engine: &Engine) -> Option<Mode> {
@@ -1641,6 +1645,8 @@ fn switch(
     }
     view::wipe();
     screen(engine, &history);
+    current(engine);
+    share(hello(engine, true), None);
     if let Some(message) = message {
         view::note(&message);
     }
@@ -1746,6 +1752,7 @@ fn model(engine: &mut Engine, roots: Option<&Roots>, name: String) {
     view::note(&format!("{} now uses {name}", engine.name()));
     engine.label = Some(name.clone());
     engine.model = Some(name);
+    retell(engine);
 }
 
 fn turn(engine: &mut Engine, text: &str, stop: &AtomicBool) -> (Draft, Outcome) {
@@ -2209,7 +2216,7 @@ fn pair(engine: &Engine, roots: Option<&Roots>, command: &str) {
                 .and_then(|number| number.checked_sub(1))
                 .and_then(|index| found.get(index));
             match picked {
-                Some(device) if crate::relay::forget(&device.id, &shared(engine)) => {
+                Some(device) if crate::relay::forget(&device.id, &shared(hello(engine, true))) => {
                     view::note(&format!(
                         "{} is disconnected and the key changed, so it can't read this chat or send to it anymore",
                         device.label
@@ -2235,9 +2242,7 @@ fn pair(engine: &Engine, roots: Option<&Roots>, command: &str) {
             match crate::relay::invite(reach, config.relay.as_deref()) {
                 Ok((url, reach)) => {
                     if fresh {
-                        for item in shared(engine) {
-                            crate::relay::post(&item);
-                        }
+                        share(hello(engine, true), None);
                     }
                     view::pairing(&url, reach);
                     if crate::clipboard::copy(&url) {
@@ -2251,14 +2256,35 @@ fn pair(engine: &Engine, roots: Option<&Roots>, command: &str) {
     }
 }
 
-fn shared(engine: &Engine) -> Vec<serde_json::Value> {
-    let mut items = vec![serde_json::json!({
+static SHARING: Mutex<()> = Mutex::new(());
+
+fn hello(engine: &Engine, fresh: bool) -> serde_json::Value {
+    serde_json::json!({
         "agent": engine.name(),
         "folder": view::home(&engine.cwd),
+        "fresh": fresh,
         "kind": "hello",
         "model": engine.label,
         "name": view::folder(&engine.cwd),
-    })];
+    })
+}
+
+fn share(hello: serde_json::Value, shown: Option<usize>) {
+    let _sharing = SHARING.lock().unwrap_or_else(PoisonError::into_inner);
+    if shown.is_none_or(view::showing) {
+        for item in shared(hello) {
+            crate::relay::post(&item);
+        }
+    }
+}
+
+fn retell(engine: &Engine) {
+    let _sharing = SHARING.lock().unwrap_or_else(PoisonError::into_inner);
+    crate::relay::post(&hello(engine, false));
+}
+
+fn shared(hello: serde_json::Value) -> Vec<serde_json::Value> {
+    let mut items = vec![hello];
     items.extend(view::recent(1_000).into_iter().map(|mut item| {
         item["again"] = serde_json::json!(true);
         item

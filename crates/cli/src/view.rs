@@ -857,6 +857,10 @@ fn kept(items: &[Item], cwd: &Path) -> Vec<Entry> {
         .collect()
 }
 
+pub fn showing(shown: usize) -> bool {
+    SHOWN.load(Ordering::SeqCst) == shown
+}
+
 pub fn backfill(items: &[Item], cwd: &Path, shown: usize) {
     if SHOWN.load(Ordering::SeqCst) != shown {
         return;

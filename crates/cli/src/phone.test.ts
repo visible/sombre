@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   COMPUTER,
   PHONE,
+  admitted,
   decrypt,
   delay,
   encode,
@@ -22,6 +23,52 @@ const bytes = (hex: string) =>
 
 const hex = (data: Uint8Array) =>
   [...data].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const replayed = (
+  messages: { kind: string; fresh?: boolean; again?: boolean }[],
+  joined = true
+) => {
+  let replay = false;
+  return messages.map((message) => {
+    const verdict = admitted(message, joined, replay);
+    ({ replay } = verdict);
+    return verdict.show;
+  });
+};
+
+describe("history replayed to a phone", () => {
+  test("a fresh hello lets the whole replay through, even across batches", () => {
+    expect(
+      replayed([
+        { fresh: true, kind: "hello" },
+        { again: true, kind: "user" },
+        { again: true, kind: "text" },
+        { again: true, kind: "user" },
+      ])
+    ).toEqual([true, true, true, true]);
+  });
+
+  test("a live message ends the replay, so later repeats are dropped", () => {
+    expect(
+      replayed([
+        { fresh: true, kind: "hello" },
+        { again: true, kind: "user" },
+        { kind: "text" },
+        { again: true, kind: "user" },
+      ])
+    ).toEqual([true, true, true, false]);
+  });
+
+  test("a repeat without a fresh hello is dropped once the phone has caught up", () => {
+    expect(
+      replayed([{ kind: "hello" }, { again: true, kind: "user" }])
+    ).toEqual([true, false]);
+  });
+
+  test("a phone still catching up shows every message", () => {
+    expect(replayed([{ again: true, kind: "user" }], false)).toEqual([true]);
+  });
+});
 
 describe("chacha20-poly1305 on the phone", () => {
   test("matches the rfc 8439 aead test vector", () => {

@@ -589,6 +589,14 @@ export const summary = (message) => {
     return `${seconds}s`;
   }
   if (seconds < 3600) {
+export const admitted = (message, joined, replay) => {
+  const next =
+    message.kind === "hello"
+      ? Boolean(message.fresh)
+      : replay && Boolean(message.again);
+  return { replay: next, show: next || !(message.again && joined) };
+};
+
     return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
   }
   const minutes = String(Math.floor(seconds / 60) % 60).padStart(2, "0");
@@ -764,6 +772,7 @@ const start = () => {
     if (gap() < 24) {
       state.stick = true;
       latest.hidden = true;
+    replay: false,
     } else if (!near()) {
       state.stick = false;
     }
@@ -1533,8 +1542,12 @@ const start = () => {
           remember("key", message.key);
           remember("keys", JSON.stringify([...known].slice(-8)));
         }
-      } else if (message && !(message.again && state.joined)) {
-        show(message);
+      } else if (message) {
+        const verdict = admitted(message, state.joined, state.replay);
+        state.replay = verdict.replay;
+        if (verdict.show) {
+          show(message);
+        }
       }
     }
     if (!(body.more || state.joined)) {
