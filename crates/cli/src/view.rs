@@ -20,7 +20,7 @@ const EMBER: Color = Color::Rgb {
     b: 20,
 };
 const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-const RECENT: usize = 10;
+pub const RECENT: usize = 10;
 
 const LABELS: [&str; 12] = [
     "Run", "Read", "Edit", "Find", "Web", "List", "Plan", "Goal", "MCP", "Task", "Test", "View",
@@ -808,34 +808,55 @@ pub fn banner(agent: &str, model: Option<&str>, mode: &str, cwd: &Path) {
     beside(&side);
 }
 
-pub fn history(items: &[Item], cwd: &Path) {
-    let _held = hold();
+static SHOWN: AtomicUsize = AtomicUsize::new(0);
+
+fn split(items: &[Item]) -> usize {
     let prompts: Vec<usize> = items
         .iter()
         .enumerate()
         .filter(|(_, item)| matches!(item, Item::Prompt(_)))
         .map(|(index, _)| index)
         .collect();
-    let start = prompts
+    prompts
         .len()
         .checked_sub(RECENT)
         .and_then(|skip| prompts.get(skip))
         .copied()
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
+
+fn kept(items: &[Item], cwd: &Path) -> Vec<Entry> {
+    items
+        .iter()
+        .cloned()
+        .map(Item::scrubbed)
+        .filter_map(|item| match item {
+            Item::Prompt(body) => Some(Entry::Said(body)),
+            Item::Text(body) => Some(Entry::Text(body)),
+            Item::Step { label, detail, .. } => Some(Entry::Step(label, detail, cwd.to_path_buf())),
+            _ => None,
+        })
+        .collect()
+}
+
+pub fn backfill(items: &[Item], cwd: &Path, shown: usize) {
+    if SHOWN.load(Ordering::SeqCst) != shown {
+        return;
+    }
+    let earlier = kept(&items[..split(items)], cwd);
+    if let Ok(mut held) = EARLIER.lock()
+        && SHOWN.load(Ordering::SeqCst) == shown
+    {
+        *held = earlier;
+    }
+}
+
+pub fn history(items: &[Item], cwd: &Path) -> usize {
+    let _held = hold();
+    let start = split(items);
+    let shown = SHOWN.fetch_add(1, Ordering::SeqCst) + 1;
     if let Ok(mut earlier) = EARLIER.lock() {
-        *earlier = items[..start]
-            .iter()
-            .cloned()
-            .map(Item::scrubbed)
-            .filter_map(|item| match item {
-                Item::Prompt(body) => Some(Entry::Said(body)),
-                Item::Text(body) => Some(Entry::Text(body)),
-                Item::Step { label, detail, .. } => {
-                    Some(Entry::Step(label, detail, cwd.to_path_buf()))
-                }
-                _ => None,
-            })
-            .collect();
+        *earlier = kept(&items[..start], cwd);
     }
     if start > 0 {
         note(&format!(
@@ -851,6 +872,7 @@ pub fn history(items: &[Item], cwd: &Path) {
         }
     }
     gap();
+    shown
 }
 
 fn said(body: &str) {
@@ -1381,6 +1403,23 @@ pub fn help() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_resume_from_the_end_fills_in_the_rest_for_a_phone_unless_the_chat_changed() {
+        let asked = |count: usize| -> Vec<Item> {
+            (0..count)
+                .map(|turn| Item::Prompt(format!("ask {turn}")))
+                .collect()
+        };
+        let earlier = || EARLIER.lock().map_or(0, |held| held.len());
+        let full = asked(30);
+        let shown = history(&full[15..], Path::new("/work"));
+        assert_eq!(earlier(), 5);
+        backfill(&full, Path::new("/work"), shown);
+        assert_eq!(earlier(), 20);
+        backfill(&asked(3), Path::new("/work"), shown - 1);
+        assert_eq!(earlier(), 20);
+    }
 
     #[test]
     fn local_links_show_by_name_and_web_links_keep_their_address() {

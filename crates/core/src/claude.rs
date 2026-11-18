@@ -100,11 +100,13 @@ pub fn transcript(path: &Path) -> Vec<Event> {
     let Ok(file) = File::open(path) else {
         return Vec::new();
     };
+    events(BufReader::new(file).lines().map_while(Result::ok))
+}
+
+pub fn events(lines: impl Iterator<Item = String>) -> Vec<Event> {
     let mut events = Vec::new();
     let mut last: Option<String> = None;
-    for entry in BufReader::new(file)
-        .lines()
-        .map_while(Result::ok)
+    for entry in lines
         .filter_map(|line| serde_json::from_str::<Value>(&line).ok())
         .filter(|entry| !entry["isSidechain"].as_bool().unwrap_or(false))
     {

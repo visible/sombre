@@ -130,7 +130,7 @@ pub fn parse(line: &str) -> Input {
     }
 }
 
-pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
+pub fn run(mut engine: Engine, history: &[Event], rest: Option<Session>) -> ExitCode {
     let stop = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&stop);
     if ctrlc::set_handler(move || flag.store(true, Ordering::SeqCst)).is_err() {
@@ -149,7 +149,10 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
     let mut models = names(roots.as_ref(), engine.agent);
     let mut composer = crate::compose::Composer::default();
     resumed(&mut engine, history, roots.as_ref());
-    screen(&engine, history);
+    let shown = screen(&engine, history);
+    if let Some(session) = rest {
+        fill(session, shown);
+    }
     if history.is_empty() {
         crate::title::set(&view::folder(&engine.cwd));
     }
@@ -447,12 +450,15 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                 if let Some(session) = pick(&sessions, &engine.cwd, all)
                     && let Some(next) = open(session)
                 {
-                    let history = transcript(session);
+                    let (history, whole) = sombre_core::recent(session, view::RECENT);
                     engine = next;
                     resumed(&mut engine, &history, Some(roots));
                     models = names(Some(roots), engine.agent);
                     view::wipe();
-                    screen(&engine, &history);
+                    let shown = screen(&engine, &history);
+                    if !whole {
+                        fill(session.clone(), shown);
+                    }
                     view::note(&format!("back in {}", session.title));
                     crate::title::set(&session.title);
                 }
@@ -461,7 +467,7 @@ pub fn run(mut engine: Engine, history: &[Event]) -> ExitCode {
                 engine.stop();
                 engine.session = None;
                 view::wipe();
-                screen(&engine, &[]);
+                let _ = screen(&engine, &[]);
                 crate::title::set(&view::folder(&engine.cwd));
             }
             Input::Current => view::note(&format!(
@@ -1338,14 +1344,18 @@ fn footer(engine: &Engine) -> Vec<String> {
     crate::footer::parts(engine)
 }
 
-fn screen(engine: &Engine, history: &[Event]) {
+fn screen(engine: &Engine, history: &[Event]) -> usize {
     view::banner(
         engine.name(),
         engine.label.as_deref(),
         engine.mode.name(),
         &engine.cwd,
     );
-    view::history(history, &engine.cwd);
+    view::history(history, &engine.cwd)
+}
+
+fn fill(session: Session, shown: usize) {
+    std::thread::spawn(move || view::backfill(&transcript(&session), &session.cwd, shown));
 }
 
 fn permissions(engine: &Engine) -> Option<Mode> {

@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use sombre_core::{Agent, Lookup, Roots, Session, ago, find, now, scan, transcript};
+use sombre_core::{Agent, Lookup, Roots, Session, ago, find, now, scan};
 use sombre_engine::Engine;
 use sombre_pair as relay;
 
@@ -113,7 +113,7 @@ fn main() -> ExitCode {
         relay::early();
     }
     let Some(action) = cli.command else {
-        return chat::run(start(cli.agent, cwd), &[]);
+        return chat::run(start(cli.agent, cwd), &[], None);
     };
     if let Action::Relay { port } = action {
         return match relay::serve(port) {
@@ -317,7 +317,8 @@ fn pretty(shown: &[&Session], total: usize, time: u64, cwd: &Path) {
 fn enter(session: &Session) -> ExitCode {
     title::set(&session.title);
     chat::open(session).map_or(ExitCode::FAILURE, |engine| {
-        chat::run(engine, &transcript(session))
+        let (history, whole) = sombre_core::recent(session, view::RECENT);
+        chat::run(engine, &history, (!whole).then(|| session.clone()))
     })
 }
 
